@@ -26,7 +26,7 @@ public final class SQLServerResource extends ListResourceBundle {
     // the keys must be prefixed with R_ to denote they are resource strings and their names should follow the camelCasing
     // convention and be descriptive
     static final Object[][] contents = {
-        // LOCALIZE THIS
+        // LOCALIZE THIS   
         {"R_userPropertyDescription", "The database user."},
         {"R_certificateStorePlatformInvalid", "Cannot set \"keyStoreAuthentication=CertificateStore\" on a Windows operating system."},
         {"R_noResultset", "The statement did not return a result set."},

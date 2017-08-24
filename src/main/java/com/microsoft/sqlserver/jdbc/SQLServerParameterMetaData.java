@@ -724,6 +724,10 @@ public final class SQLServerParameterMetaData implements ParameterMetaData {
             SQLServerException.makeFromDriverError(con, stmtParent, SQLServerException.getErrString("R_noMetadata"), null, false);
         }
     }
+    
+    public Map<Integer, QueryMeta> getQueryMetaMap() {
+        return queryMetaMap;
+    }
 
     /* L2 */ public String getParameterClassName(int param) throws SQLServerException {
         checkClosed();

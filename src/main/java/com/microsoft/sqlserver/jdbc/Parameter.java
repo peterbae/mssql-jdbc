@@ -62,6 +62,9 @@ final class Parameter {
     private int valueLength = 0;
 
     private boolean forceEncryption = false;
+    
+    // Specifies if this parameter is mapped to either a datetime or datetime2 column on the server's end.
+    private boolean isSSColumnDatetime = false;
 
     Parameter(boolean honorAE) {
         shouldHonorAEForParameter = honorAE;
@@ -639,6 +642,11 @@ final class Parameter {
                     else {
                         param.typeDefinition = con.isKatmaiOrLater() ? SSType.DATETIME2.toString() : SSType.DATETIME.toString();
                     }
+                    
+                    //Lastly, even if it is Katmai or later, if the column on the server's end is datetime, send it as datetime
+                    if (isSSColumnDatetime) {
+                        param.typeDefinition = SSType.DATETIME.toString();
+                    }
                     break;
 
                 case DATETIME:
@@ -666,6 +674,11 @@ final class Parameter {
                             }
                             break;
                         }
+                    }
+                    
+                    //Lastly, even if it is Katmai or later, if the column on the server's end is datetime, send it as datetime
+                    if (isSSColumnDatetime) {
+                        param.typeDefinition = SSType.DATETIME.toString();
                     }
                     break;
 
@@ -1212,5 +1225,9 @@ final class Parameter {
 
     void setForceEncryption(boolean forceEncryption) {
         this.forceEncryption = forceEncryption;
+    }
+    
+    public void setIsSSColumnDatetime(boolean isSSColumnDatetime) {
+        this.isSSColumnDatetime = isSSColumnDatetime;
     }
 }

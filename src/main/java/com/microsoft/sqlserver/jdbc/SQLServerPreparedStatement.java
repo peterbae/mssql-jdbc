@@ -33,6 +33,7 @@ import java.util.logging.Level;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection.PreparedStatementHandle;
 import com.microsoft.sqlserver.jdbc.SQLServerConnection.Sha1HashKey;
+import com.microsoft.sqlserver.jdbc.SQLServerParameterMetaData.QueryMeta;
 
 /**
  * SQLServerPreparedStatement provides JDBC prepared statement functionality. SQLServerPreparedStatement provides methods for the user to supply
@@ -136,6 +137,10 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
      * Flag set to true when all encryption metadata of inOutParam is retrieved
      */
     private boolean encryptionMetadataIsRetrieved = false;
+    
+    /** Holds the corresponding data type on the SQL Server's end for each parameter.
+     * Used to distinguish between datetime and datetime2 columns. */
+    private Map<Integer, QueryMeta> SSTableColTypes = null;
 
     // Internal function used in tracing
     String getClassNameInternal() {
@@ -339,6 +344,17 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
         int nCols = params.length;
         char cParamName[] = new char[10];
         parameterNames = new ArrayList<String>();
+        
+        // if SSTableColTypes is not null, then we are inserting into at least one column
+        // that is either datetime or datetime2
+        if (null != SSTableColTypes) {
+            for (int i = 1; i <= params.length; i++) {
+                QueryMeta value = SSTableColTypes.get(i);
+                if (null != value && value.parameterTypeName.equalsIgnoreCase("datetime")) {
+                    params[i - 1].setIsSSColumnDatetime(true);
+                }
+            }
+        }
 
         for (int i = 0; i < nCols; i++) {
             if (i > 0)
@@ -1009,6 +1025,23 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
         loggerExternal.exiting(getClassNameLogging(), "getMetaData", rsmd);
         return rsmd;
     }
+    
+    /**
+     * Populate SSTableColTypes field. This field will later be used to determine if each parameter with either datetime or timestamp JDBC type
+     * should interpret the data as datetime or datetime2 value.
+     * @throws SQLServerException 
+     * 
+     */
+    private void checkIfMetadataNeeded(JDBCType jdbcType) throws SQLServerException {
+        //Currently, only needed to run this operation for Timestamp or Datetime types
+        if (JDBCType.TIMESTAMP == jdbcType || JDBCType.DATETIME == jdbcType) {
+            //Make sure that this is only called once - this is contacting the server, so it's expensive.
+            if (null == SSTableColTypes) {
+                SQLServerParameterMetaData params = (SQLServerParameterMetaData) getParameterMetaData();
+                SSTableColTypes = params.getQueryMetaMap();
+            }
+        }
+    }
 
     /**
      * Retreive meta data for the statement before executing it. This is called in cases where the driver needs the meta data prior to executing the
@@ -1066,6 +1099,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
             String tvpName) throws SQLServerException {
         setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, null, null, null, connection, false, stmtColumnEncriptionSetting,
                 parameterIndex, userSQL, tvpName);
+        checkIfMetadataNeeded(jdbcType);
     }
 
     final void setValue(int parameterIndex,
@@ -1075,6 +1109,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
             boolean forceEncrypt) throws SQLServerException {
         setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, null, null, null, connection, forceEncrypt,
                 stmtColumnEncriptionSetting, parameterIndex, userSQL, null);
+        checkIfMetadataNeeded(jdbcType);
     }
 
     final void setValue(int parameterIndex,
@@ -1086,6 +1121,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
             boolean forceEncrypt) throws SQLServerException {
         setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, null, precision, scale, connection, forceEncrypt,
                 stmtColumnEncriptionSetting, parameterIndex, userSQL, null);
+        checkIfMetadataNeeded(jdbcType);
     }
 
     final void setValue(int parameterIndex,
@@ -1096,6 +1132,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
             boolean forceEncrypt) throws SQLServerException {
         setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, cal, null, null, connection, forceEncrypt,
                 stmtColumnEncriptionSetting, parameterIndex, userSQL, null);
+        checkIfMetadataNeeded(jdbcType);
     }
 
     final void setStream(int parameterIndex,
@@ -1862,6 +1899,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
             // typeInfo is set as null
             param.setValue(jdbcType, obj, javaType, streamSetterArgs, null, precision, scale, connection, forceEncrypt, stmtColumnEncriptionSetting,
                     parameterIndex, userSQL, tvpName);
+            checkIfMetadataNeeded(jdbcType);
         }
 
         // For null values, use the specified JDBC type directly, with the exception

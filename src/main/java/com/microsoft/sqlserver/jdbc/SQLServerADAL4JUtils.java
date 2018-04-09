@@ -33,7 +33,8 @@ class SQLServerADAL4JUtils {
                     password, null);
 
             AuthenticationResult authenticationResult = future.get();
-            SqlFedAuthToken fedAuthToken = new SqlFedAuthToken(authenticationResult.getAccessToken(), authenticationResult.getExpiresOnDate());
+            SqlFedAuthToken fedAuthToken = new SqlFedAuthToken(authenticationResult.getAccessToken(),
+                    authenticationResult.getRefreshToken(), authenticationResult.getExpiresOnDate());
 
             return fedAuthToken;
         }
@@ -80,7 +81,8 @@ class SQLServerADAL4JUtils {
                     username, null, null);
 
             AuthenticationResult authenticationResult = future.get();
-            SqlFedAuthToken fedAuthToken = new SqlFedAuthToken(authenticationResult.getAccessToken(), authenticationResult.getExpiresOnDate());
+            SqlFedAuthToken fedAuthToken = new SqlFedAuthToken(authenticationResult.getAccessToken(),
+                    authenticationResult.getRefreshToken(), authenticationResult.getExpiresOnDate());
 
             return fedAuthToken;
         }
@@ -108,6 +110,27 @@ class SQLServerADAL4JUtils {
 
                 throw new SQLServerException(form.format(msgArgs), null, 0, correctedExecutionException);
             }
+        }
+        finally {
+            executorService.shutdown();
+        }
+    }
+
+    static SqlFedAuthToken refreshSqlFedAuthToken(SqlFedAuthInfo fedAuthInfo,
+            SqlFedAuthToken fedAuthToken) throws SQLServerException {
+        ExecutorService executorService = Executors.newFixedThreadPool(1);
+        try {
+            AuthenticationContext context = new AuthenticationContext(fedAuthInfo.stsurl, false, executorService);
+            Future<AuthenticationResult> future = context.acquireTokenByRefreshToken(fedAuthToken.refreshToken, ActiveDirectoryAuthentication.JDBC_FEDAUTH_CLIENT_ID, fedAuthInfo.spn, null);
+
+            AuthenticationResult authenticationResult = future.get();
+            SqlFedAuthToken newFedAuthToken = new SqlFedAuthToken(authenticationResult.getAccessToken(),
+                    authenticationResult.getRefreshToken(), authenticationResult.getExpiresOnDate());
+
+            return newFedAuthToken;
+        }
+        catch (MalformedURLException | InterruptedException | ExecutionException e) {
+            throw new SQLServerException(e.getMessage(), e);
         }
         finally {
             executorService.shutdown();

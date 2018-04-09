@@ -116,6 +116,7 @@ public class SQLServerConnection implements ISQLServerConnection {
     private byte[] accessTokenInByte = null;
 
     private SqlFedAuthToken fedAuthToken = null;
+    private SqlFedAuthInfo fedAuthInfo = null;
 
     static class Sha1HashKey {
         private byte[] bytes;
@@ -1009,7 +1010,15 @@ public class SQLServerConnection implements ISQLServerConnection {
 
         if (null != fedAuthToken) {
             if (Util.checkIfNeedNewAccessToken(this)) {
-                connect(this.activeConnectionProperties, null);
+                try {
+                    this.fedAuthToken = SQLServerADAL4JUtils.refreshSqlFedAuthToken(fedAuthInfo, fedAuthToken);
+                } catch (SQLServerException e) {
+                    // If refreshing the token fails, try making a new connection.
+                    if (connectionlogger.isLoggable(Level.FINE)) {
+                        connectionlogger.fine("Refreshing Access token failed, creating a new connection...");
+                    }
+                    connect(this.activeConnectionProperties, null);
+                }
             }
         }
     }
@@ -3663,7 +3672,7 @@ public class SQLServerConnection implements ISQLServerConnection {
 
     final void processFedAuthInfo(TDSReader tdsReader,
             TDSTokenHandler tdsTokenHandler) throws SQLServerException {
-        SqlFedAuthInfo sqlFedAuthInfo = new SqlFedAuthInfo();
+        fedAuthInfo = new SqlFedAuthInfo();
 
         tdsReader.readUnsignedByte(); // token type, 0xEE
 
@@ -3767,10 +3776,10 @@ public class SQLServerConnection implements ISQLServerConnection {
                 // store data in tempFedAuthInfo
                 switch (id) {
                     case TDS.FEDAUTH_INFO_ID_SPN:
-                        sqlFedAuthInfo.spn = data;
+                        fedAuthInfo.spn = data;
                         break;
                     case TDS.FEDAUTH_INFO_ID_STSURL:
-                        sqlFedAuthInfo.stsurl = data;
+                        fedAuthInfo.stsurl = data;
                         break;
                     default:
                         if (connectionlogger.isLoggable(Level.FINER)) {
@@ -3788,8 +3797,8 @@ public class SQLServerConnection implements ISQLServerConnection {
             throw new SQLServerException(form.format(new Object[] {tokenLen}), null);
         }
 
-        if (null == sqlFedAuthInfo.spn || null == sqlFedAuthInfo.stsurl || sqlFedAuthInfo.spn.trim().isEmpty()
-                || sqlFedAuthInfo.stsurl.trim().isEmpty()) {
+        if (null == fedAuthInfo.spn || null == fedAuthInfo.stsurl || fedAuthInfo.spn.trim().isEmpty()
+                || fedAuthInfo.stsurl.trim().isEmpty()) {
             // We should be receiving both stsurl and spn
             if (connectionlogger.isLoggable(Level.SEVERE)) {
                 connectionlogger.severe(toString() + "FEDAUTHINFO token stream does not contain both STSURL and SPN.");
@@ -3797,7 +3806,7 @@ public class SQLServerConnection implements ISQLServerConnection {
             throw new SQLServerException(SQLServerException.getErrString("R_FedAuthInfoDoesNotContainStsurlAndSpn"), null);
         }
 
-        onFedAuthInfo(sqlFedAuthInfo, tdsTokenHandler);
+        onFedAuthInfo(fedAuthInfo, tdsTokenHandler);
     }
 
     final class FedAuthTokenCommand extends UninterruptableTDSCommand {
@@ -3860,78 +3869,11 @@ public class SQLServerConnection implements ISQLServerConnection {
             }
             else if (authenticationString.trim().equalsIgnoreCase(SqlAuthentication.ActiveDirectoryIntegrated.toString())) {
                 
-                // If operating system is windows and sqljdbc_auth is loaded then choose the DLL authentication.
-                if (System.getProperty("os.name").toLowerCase(Locale.ENGLISH).startsWith("windows") && AuthenticationJNI.isDllLoaded()) {
-                    try {
-                        long expirationFileTime = 0;
-                        FedAuthDllInfo dllInfo = AuthenticationJNI.getAccessTokenForWindowsIntegrated(fedAuthInfo.stsurl, fedAuthInfo.spn,
-                                clientConnectionId.toString(), ActiveDirectoryAuthentication.JDBC_FEDAUTH_CLIENT_ID, expirationFileTime);
-
-                        // AccessToken should not be null.
-                        assert null != dllInfo.accessTokenBytes;
-
-                        byte[] accessTokenFromDLL = dllInfo.accessTokenBytes;
-
-                        String accessToken = new String(accessTokenFromDLL, UTF_16LE);
-
-                        fedAuthToken = new SqlFedAuthToken(accessToken, dllInfo.expiresIn);
-
-                        // Break out of the retry loop in successful case.
-                        break;
-                    }
-                    catch (DLLException adalException) {
-
-                        // the sqljdbc_auth.dll return -1 for errorCategory, if unable to load the adalsql.dll
-                        int errorCategory = adalException.GetCategory();
-                        if (-1 == errorCategory) {
-                            MessageFormat form = new MessageFormat(SQLServerException.getErrString("R_UnableLoadADALSqlDll"));
-                            Object[] msgArgs = {Integer.toHexString(adalException.GetState())};
-                            throw new SQLServerException(form.format(msgArgs), null);
-                        }
-
-                        int millisecondsRemaining = TimerRemaining(timerExpire);
-                        if (ActiveDirectoryAuthentication.GET_ACCESS_TOKEN_TANSISENT_ERROR != errorCategory || timerHasExpired(timerExpire)
-                                || (sleepInterval >= millisecondsRemaining)) {
-
-                            String errorStatus = Integer.toHexString(adalException.GetStatus());
-
-                            if (connectionlogger.isLoggable(Level.FINER)) {
-                                connectionlogger.fine(toString() + " SQLServerConnection.getFedAuthToken.AdalException category:" + errorCategory
-                                        + " error: " + errorStatus);
-                            }
-
-                            MessageFormat form1 = new MessageFormat(SQLServerException.getErrString("R_ADALAuthenticationMiddleErrorMessage"));
-                            String errorCode = Integer.toHexString(adalException.GetStatus()).toUpperCase();
-                            Object[] msgArgs1 = {errorCode, adalException.GetState()};
-                            SQLServerException middleException = new SQLServerException(form1.format(msgArgs1), adalException);
-
-                            MessageFormat form = new MessageFormat(SQLServerException.getErrString("R_ADALExecution"));
-                            Object[] msgArgs = {user, authenticationString};
-                            throw new SQLServerException(form.format(msgArgs), null, 0, middleException);
-                        }
-
-                        if (connectionlogger.isLoggable(Level.FINER)) {
-                            connectionlogger.fine(toString() + " SQLServerConnection.getFedAuthToken sleeping: " + sleepInterval + " milliseconds.");
-                            connectionlogger
-                                    .fine(toString() + " SQLServerConnection.getFedAuthToken remaining: " + millisecondsRemaining + " milliseconds.");
-                        }
-
-                        try {
-                            Thread.sleep(sleepInterval);
-                        }
-                        catch (InterruptedException e1) {
-                            // re-interrupt the current thread, in order to restore the thread's interrupt status.
-                            Thread.currentThread().interrupt();
-                        }
-                        sleepInterval = sleepInterval * 2;
-                    }
-                }
-                // else choose ADAL4J for integrated authentication. This option is supported for both windows and unix, so we don't need to check the
-                // OS version here.
-                else {
-                    fedAuthToken = SQLServerADAL4JUtils.getSqlFedAuthTokenIntegrated(fedAuthInfo, authenticationString);
-                }
-                // Break out of the retry loop in successful case.
+                // Use ADAL4J to get the fedAuthToken for integrated authentication.
+                // We can't use the native DLLs for getting the fedAuthToken anymore, since the AuthenticationJNI.getAccessTokenForWindowsIntegrated
+                // method doesn't return the token that has a refresh token with it.
+                //This option is supported for both windows and unix, so we don't need to check the OS version here.
+                fedAuthToken = SQLServerADAL4JUtils.getSqlFedAuthTokenIntegrated(fedAuthInfo, authenticationString);
                 break;
             }
         }

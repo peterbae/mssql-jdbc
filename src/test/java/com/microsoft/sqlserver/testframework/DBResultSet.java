@@ -53,7 +53,7 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
     protected DBTable currentTable;
     public int _currentrow = -1;       // The row this rowset is currently pointing to
 
-    ResultSet resultSet = null;
+    private ResultSet resultSet = null;
     DBResultSetMetaData metaData;
 
     DBResultSet(DBStatement dbstatement,
@@ -94,7 +94,22 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
      */
     public boolean next() throws SQLException {
         _currentrow++;
-        return resultSet.next();
+        System.out.println("_currentrow value after next: " + _currentrow);
+        
+        try {
+            System.out.println("BigInt value in resultset before next: " + resultSet.getObject(1));
+        } catch (Exception e) {
+            System.out.println("oops, resultset reached before the beginning.");
+        }
+        
+        boolean rs = resultSet.next();
+        
+        try {
+            System.out.println("BigInt value in resultset after next: " + resultSet.getObject(1));
+        } catch (Exception e) {
+            System.out.println("oops, resultset reached the end.");
+        }
+        return rs;
     }
 
     /**
@@ -173,9 +188,9 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
      * @throws SQLException
      */
     public void verify(DBTable table) throws SQLException {
-        currentTable = table;
-        metaData = this.getMetaData();
-        metaData.verify();
+//        currentTable = table;
+//        metaData = this.getMetaData();
+//        metaData.verify();
 
         while (this.next())
             this.verifyCurrentRow(table);
@@ -186,8 +201,9 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
      * 
      */
     public void verifyCurrentRow(DBTable table) throws SQLException {
-        currentTable = table;
+//        currentTable = table;
         int totalColumns = ((ResultSet) product()).getMetaData().getColumnCount();
+        System.out.println("totalColumns value in verifyCurrentRow: " + totalColumns);
 
         Class _class = Object.class;
         for (int i = 0; i < totalColumns; i++)
@@ -203,6 +219,8 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
      */
     public void verifydata(int ordinal,
             Class coercion) throws SQLException {
+        System.out.println("_currentrow value in verifydata: " + _currentrow);
+        
         Object expectedData = currentTable.columns.get(ordinal).getRowValue(_currentrow);
 
         // getXXX - default mapping
@@ -228,6 +246,8 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
         metaData = this.getMetaData();
         switch (metaData.getColumnType(ordinal + 1)) {
             case java.sql.Types.BIGINT:
+                System.out.println("expectedData = " + ((Long) expectedData).longValue());
+                System.out.println("retrieved = " + ((Long) retrieved).longValue());
                 assertTrue((((Long) expectedData).longValue() == ((Long) retrieved).longValue()),
                         "Unexpected bigint value, expected: " + (Long) expectedData + " .Retrieved: " + (Long) retrieved);
                 break;
@@ -410,10 +430,11 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
     public boolean previous() throws SQLException {
 
         boolean validrow = ((ResultSet) product()).previous();
-
+        System.out.println("_currentrow value in previous: " + _currentrow);
         if (_currentrow > 0) {
             _currentrow--;
         }
+        System.out.println("_currentrow value in previous after: " + _currentrow);
         return (validrow);
     }
 
@@ -424,6 +445,7 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
     public void afterLast() throws SQLException {
         ((ResultSet) product()).afterLast();
         _currentrow = currentTable.getTotalRows();
+        System.out.println("_currentrow value: in afterLast: " + _currentrow);
     }
 
     /**
@@ -435,6 +457,7 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
     public boolean absolute(int x) throws SQLException {
         boolean validrow = ((ResultSet) product()).absolute(x);
         _currentrow = x - 1;
+        System.out.println("_currentrow value in absolute: " + _currentrow);
         return validrow;
     }
 

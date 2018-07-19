@@ -947,11 +947,13 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
      * or after the last row.
      */
     private void updateCurrentRow(int rowsToMove) {
+        System.out.println("value of currentRow in updateCurrentRow before: " + currentRow);
         if (UNKNOWN_ROW != currentRow) {
             assert currentRow >= 1;
             currentRow += rowsToMove;
             assert currentRow >= 1;
         }
+        System.out.println("value of currentRow in updateCurrentRow after: " + currentRow);
     }
 
     /**
@@ -962,6 +964,8 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
      */
     @Override
     public boolean next() throws SQLServerException {
+        System.out.println("Entering next in SQLServerResultSet");
+        System.out.println("value of currentRow: " + currentRow);
         loggerExternal.entering(getClassNameLogging(), "next");
         if (loggerExternal.isLoggable(Level.FINER) && Util.IsActivityTraceOn()) {
             loggerExternal.finer(toString() + " ActivityId: " + ActivityCorrelator.getNext().toString());
@@ -1007,6 +1011,8 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
         // There is no scroll window for forward only cursors,
         // so try to get the next row directly from the fetch buffer.
         if (fetchBufferNext()) {
+            System.out.println("Entered fetchBufferNext.");
+            System.out.println("value of currentRow before: " + currentRow);
             // Update the current row.
             // Note that if the position was before the first row, the current
             // row should be updated to row 1.
@@ -1021,6 +1027,7 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
             assert 0 == maxRows || currentRow <= maxRows;
             loggerExternal.exiting(getClassNameLogging(), "next", true);
             // Return that a row was read.
+            System.out.println("value of currentRow after: " + currentRow);
             return true;
         }
 

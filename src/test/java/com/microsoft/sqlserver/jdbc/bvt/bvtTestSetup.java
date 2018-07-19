@@ -40,5 +40,21 @@ public class bvtTestSetup extends AbstractTest {
             stmt.createTable(table2);
             stmt.populateTable(table2);
         }
+        
+        System.out.println("name of t1 : " + table1.getTableName());
+        System.out.println("name of t2 : " + table2.getTableName());
+        
+        System.out.println("total table size of t1 : " + table1.getTotalRows());
+        System.out.println("total table size of t2 : " + table2.getTotalRows());
+        
+        System.out.println("t1 all bigint data: ");
+        for (int i = 0 ; i < table1.getTotalRows(); i++) {
+            System.out.println(table1.getRowData(0, i));
+        }
+        
+        System.out.println("t2 all bigint data: ");
+        for (int i = 0 ; i < table2.getTotalRows(); i++) {
+            System.out.println(table2.getRowData(0, i));
+        }
     }
 }

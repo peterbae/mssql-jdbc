@@ -122,7 +122,7 @@ public class bvtTest extends bvtTestSetup {
     public void testStmtForwardOnlyReadOnly() throws SQLException, ClassNotFoundException {
 
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
-    	
+    	System.out.println("starting testStmtForwardOnlyReadOnly");
         try (DBConnection conn = new DBConnection(connectionString);
             DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_READ_ONLY);
             DBResultSet rs = stmt.executeQuery(query)) {
@@ -141,6 +141,7 @@ public class bvtTest extends bvtTestSetup {
             }
             rs.verify(table1);
         }
+        System.out.println("ending testStmtForwardOnlyReadOnly");
     }
 
     /**
@@ -152,6 +153,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testStmtScrollInsensitiveReadOnly() throws SQLException, ClassNotFoundException {
+        System.out.println("starting testStmtScrollInsensitiveReadOnly");
         try (DBConnection conn = new DBConnection(connectionString);
             DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_SCROLL_INSENSITIVE_CONCUR_READ_ONLY);
         	DBResultSet rs = stmt.selectAll(table1)) {
@@ -162,6 +164,7 @@ public class bvtTest extends bvtTestSetup {
             rs.verifyCurrentRow(table1);
             rs.verify(table1);
         }
+        System.out.println("ending testStmtScrollInsensitiveReadOnly");
     }
 
     /**
@@ -172,7 +175,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testStmtScrollSensitiveReadOnly() throws SQLException {
-
+        System.out.println("starting testStmtScrollSensitiveReadOnly");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         
         try (DBConnection conn = new DBConnection(connectionString);
@@ -187,6 +190,7 @@ public class bvtTest extends bvtTestSetup {
             rs.verify(table1);
 
         }
+        System.out.println("ending testStmtScrollSensitiveReadOnly");
     }
 
     /**
@@ -199,6 +203,7 @@ public class bvtTest extends bvtTestSetup {
     public void testStmtForwardOnlyUpdateable() throws SQLException {
         
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
+    	System.out.println("starting testStmtForwardOnlyUpdateable");
 
         try (DBConnection conn = new DBConnection(connectionString);
             DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_UPDATABLE);
@@ -219,6 +224,7 @@ public class bvtTest extends bvtTestSetup {
             }
             rs.verify(table1);
         }
+        System.out.println("ending testStmtForwardOnlyUpdateable");
     }
 
     /**
@@ -231,7 +237,7 @@ public class bvtTest extends bvtTestSetup {
     public void testStmtScrollSensitiveUpdatable() throws SQLException {
 
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
-    	
+    	System.out.println("starting testStmtScrollSensitiveUpdatable");
         try (DBConnection conn = new DBConnection(connectionString);
             DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_SCROLL_SENSITIVE_CONCUR_UPDATABLE);
         	DBResultSet rs = stmt.executeQuery(query)) {
@@ -245,6 +251,7 @@ public class bvtTest extends bvtTestSetup {
             rs.absolute(1);
             rs.verify(table1);
         }
+        System.out.println("ending testStmtScrollSensitiveUpdatable");
     }
 
     /**
@@ -254,7 +261,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testStmtSSScrollDynamicOptimisticCC() throws SQLException {
-
+        System.out.println("starting testStmtSSScrollDynamicOptimisticCC");
         try (DBConnection conn = new DBConnection(connectionString);
              DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_DYNAMIC_CONCUR_OPTIMISTIC);
              DBResultSet rs = stmt.selectAll(table1)) {
@@ -265,6 +272,7 @@ public class bvtTest extends bvtTestSetup {
             rs.previous();
             rs.verify(table1);
         }
+        System.out.println("ending testStmtSSScrollDynamicOptimisticCC");
     }
 
     /**
@@ -277,7 +285,7 @@ public class bvtTest extends bvtTestSetup {
 
         DBResultSetTypes rsType = DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_READ_ONLY;
         String query = "SELECT * FROM " + table1.getEscapedTableName();
-        
+        System.out.println("starting testStmtSserverCursorForwardOnly");
         try (DBConnection conn = new DBConnection(connectionString);
             DBStatement stmt = conn.createStatement(rsType.resultsetCursor, rsType.resultSetConcurrency);
         	DBResultSet rs = stmt.executeQuery(query)) {
@@ -285,6 +293,7 @@ public class bvtTest extends bvtTestSetup {
             rs.next();
             rs.verify(table1);
         }
+        System.out.println("ending testStmtSserverCursorForwardOnly");
     }
 
     /**
@@ -298,7 +307,7 @@ public class bvtTest extends bvtTestSetup {
         String colName = table1.getColumnName(7);
         String value = table1.getRowData(7, 0).toString();
         String query = "SELECT * from " + table1.getEscapedTableName() + " where [" + colName + "] = ? ";
-        
+        System.out.println("starting testCreatepreparedStatement");
         try (DBConnection conn = new DBConnection(connectionString);
              DBPreparedStatement pstmt = conn.prepareStatement(query)) {
 
@@ -307,6 +316,7 @@ public class bvtTest extends bvtTestSetup {
             rs.verify(table1);
             rs.close();
         }
+        System.out.println("ending testCreatepreparedStatement");
     }
 
     /**
@@ -318,13 +328,14 @@ public class bvtTest extends bvtTestSetup {
     public void testResultSet() throws SQLException {
 
         String query = "SELECT * FROM " + table1.getEscapedTableName();
-        
+        System.out.println("starting testResultSet");
         try (DBConnection conn = new DBConnection(connectionString);
              DBStatement stmt = conn.createStatement();
         	 DBResultSet rs = stmt.executeQuery(query)) {
             // verify resultSet
             rs.verify(table1);
         }
+        System.out.println("ending testResultSet");
     }
 
     /**
@@ -361,7 +372,7 @@ public class bvtTest extends bvtTestSetup {
     	
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         String query2 = "SELECT * FROM " + table2.getEscapedTableName();
-
+        System.out.println("starting testTwoResultsetsDifferentStmt");
         try (DBConnection conn = new DBConnection(connectionString);
              DBStatement stmt1 = conn.createStatement();
              DBStatement stmt2 = conn.createStatement()) {
@@ -382,6 +393,7 @@ public class bvtTest extends bvtTestSetup {
             rs2.verify(table2);
             rs2.close();
         }
+        System.out.println("ending testTwoResultsetsDifferentStmt");
     }
 
     /**
@@ -394,7 +406,7 @@ public class bvtTest extends bvtTestSetup {
 
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         String query2 = "SELECT * FROM " + table2.getEscapedTableName();
-        
+        System.out.println("starting testTwoResultsetsSameStmt");
         try (DBConnection conn = new DBConnection(connectionString);
              DBStatement stmt = conn.createStatement()) {
 
@@ -420,6 +432,7 @@ public class bvtTest extends bvtTestSetup {
             rs2.verify(table2);
             rs2.close();
         }
+        System.out.println("ending testTwoResultsetsSameStmt");
     }
 
     /**
@@ -429,6 +442,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testResultSetAndCloseStmt() throws SQLException {
+        System.out.println("starting testResultSetAndCloseStmt");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         try (DBConnection conn = new DBConnection(connectionString);
              DBStatement stmt = conn.createStatement();
@@ -443,6 +457,7 @@ public class bvtTest extends bvtTestSetup {
             }
             assertTrue(true, "Previous one should have thrown exception!");
         }
+        System.out.println("ending testResultSetAndCloseStmt");
     }
 
     /**
@@ -452,13 +467,14 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testResultSetSelectMethod() throws SQLException {
-
+        System.out.println("starting testResultSetSelectMethod");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         try (DBConnection conn = new DBConnection(connectionString + ";selectMethod=cursor;");
              DBStatement stmt = conn.createStatement();
              DBResultSet rs = stmt.executeQuery(query)) {
             rs.verify(table1);
         }
+        System.out.println("ending testResultSetSelectMethod");
     }
 
     /**

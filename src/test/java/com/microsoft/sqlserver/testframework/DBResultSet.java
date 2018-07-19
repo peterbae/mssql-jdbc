@@ -56,13 +56,13 @@ public class DBResultSet extends AbstractParentWrapper implements AutoCloseable 
     private ResultSet resultSet = null;
     DBResultSetMetaData metaData;
 
-    DBResultSet(DBStatement dbstatement,
+    public DBResultSet(DBStatement dbstatement,
             ResultSet internal) {
         super(dbstatement, internal, "resultSet");
         resultSet = internal;
     }
 
-    DBResultSet(DBStatement dbstatement,
+    public DBResultSet(DBStatement dbstatement,
             ResultSet internal,
             DBTable table) {
         super(dbstatement, internal, "resultSet");

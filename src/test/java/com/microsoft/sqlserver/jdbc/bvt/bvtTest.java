@@ -12,8 +12,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,7 +49,7 @@ public class bvtTest extends bvtTestSetup {
     @Test
     @DisplayName("test connection")
     public void testConnection() throws SQLException {
-        try (DBConnection conn = new DBConnection(connectionString)) {}
+        try (Connection conn = DriverManager.getConnection(connectionString)) {}
     }
 
     /**
@@ -54,7 +59,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testConnectionIsClosed() throws SQLException {
-        try (DBConnection conn = new DBConnection(connectionString)) {
+        try (Connection conn = DriverManager.getConnection(connectionString)) {
             assertTrue(!conn.isClosed(), TestResource.getResource("R_connShouldNotBeClosed"));
             conn.close();
             assertTrue(conn.isClosed(), TestResource.getResource("R_connShouldNotBeOpen"));
@@ -69,7 +74,7 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testDriverNameAndDriverVersion() throws SQLException {
-        try (DBConnection conn = new DBConnection(connectionString)) {
+        try (Connection conn = DriverManager.getConnection(connectionString)) {
             DatabaseMetaData metaData = conn.getMetaData();
             Pattern p = Pattern.compile(driverNamePattern);
             Matcher m = p.matcher(metaData.getDriverName());
@@ -90,9 +95,10 @@ public class bvtTest extends bvtTestSetup {
 
     	String query = "SELECT * FROM " + table1.getEscapedTableName() + ";";
     	
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement();
-            DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement();
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             rs.verify(table1);
         }
     }
@@ -105,8 +111,8 @@ public class bvtTest extends bvtTestSetup {
     @Test
     public void testCreateStatementWithQueryTimeout() throws SQLException {
 
-        try (DBConnection conn = new DBConnection(connectionString + ";querytimeout=10");
-            DBStatement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(connectionString + ";querytimeout=10");
+            Statement stmt = conn.createStatement()) {
             assertEquals(10, stmt.getQueryTimeout());
         }
     }
@@ -123,9 +129,10 @@ public class bvtTest extends bvtTestSetup {
 
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
     	System.out.println("starting testStmtForwardOnlyReadOnly");
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_READ_ONLY);
-            DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
 
             rs.next();
             rs.verifyCurrentRow(table1);
@@ -153,10 +160,12 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testStmtScrollInsensitiveReadOnly() throws SQLException, ClassNotFoundException {
+        String query = "SELECT * FROM " + table1.getEscapedTableName();
         System.out.println("starting testStmtScrollInsensitiveReadOnly");
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_SCROLL_INSENSITIVE_CONCUR_READ_ONLY);
-        	DBResultSet rs = stmt.selectAll(table1)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             rs.next();
             rs.verifyCurrentRow(table1);
             rs.afterLast();
@@ -178,9 +187,10 @@ public class bvtTest extends bvtTestSetup {
         System.out.println("starting testStmtScrollSensitiveReadOnly");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_SCROLL_SENSITIVE_CONCUR_READ_ONLY);
-            DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             rs.next();
             rs.next();
             rs.verifyCurrentRow(table1);
@@ -205,9 +215,10 @@ public class bvtTest extends bvtTestSetup {
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
     	System.out.println("starting testStmtForwardOnlyUpdateable");
 
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_UPDATABLE);
-        	DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             rs.next();
 
             // Verify resultset behavior
@@ -238,9 +249,10 @@ public class bvtTest extends bvtTestSetup {
 
     	String query = "SELECT * FROM " + table1.getEscapedTableName();
     	System.out.println("starting testStmtScrollSensitiveUpdatable");
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_SCROLL_SENSITIVE_CONCUR_UPDATABLE);
-        	DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
 
             // Verify resultset behavior
             rs.next();
@@ -261,10 +273,12 @@ public class bvtTest extends bvtTestSetup {
      */
     @Test
     public void testStmtSSScrollDynamicOptimisticCC() throws SQLException {
+        String query = "SELECT * FROM " + table1.getEscapedTableName();
         System.out.println("starting testStmtSSScrollDynamicOptimisticCC");
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement(DBResultSetTypes.TYPE_DYNAMIC_CONCUR_OPTIMISTIC);
-             DBResultSet rs = stmt.selectAll(table1)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE + 1, ResultSet.CONCUR_UPDATABLE + 2);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc, table1)) {
 
             // Verify resultset behavior
             rs.next();
@@ -286,9 +300,10 @@ public class bvtTest extends bvtTestSetup {
         DBResultSetTypes rsType = DBResultSetTypes.TYPE_FORWARD_ONLY_CONCUR_READ_ONLY;
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         System.out.println("starting testStmtSserverCursorForwardOnly");
-        try (DBConnection conn = new DBConnection(connectionString);
-            DBStatement stmt = conn.createStatement(rsType.resultsetCursor, rsType.resultSetConcurrency);
-        	DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+            Statement stmt = conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             // Verify resultset behavior
             rs.next();
             rs.verify(table1);
@@ -308,11 +323,12 @@ public class bvtTest extends bvtTestSetup {
         String value = table1.getRowData(7, 0).toString();
         String query = "SELECT * from " + table1.getEscapedTableName() + " where [" + colName + "] = ? ";
         System.out.println("starting testCreatepreparedStatement");
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBPreparedStatement pstmt = conn.prepareStatement(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setObject(1, new BigDecimal(value));
-            DBResultSet rs = pstmt.executeQuery();
+            ResultSet rsjdbc = pstmt.executeQuery();
+            DBResultSet rs = new DBResultSet(null, rsjdbc);
             rs.verify(table1);
             rs.close();
         }
@@ -329,9 +345,10 @@ public class bvtTest extends bvtTestSetup {
 
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         System.out.println("starting testResultSet");
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement();
-        	 DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement();
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             // verify resultSet
             rs.verify(table1);
         }
@@ -348,9 +365,10 @@ public class bvtTest extends bvtTestSetup {
 
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement();
-             DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement();
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
 
             try {
                 if (null != rs)
@@ -373,12 +391,15 @@ public class bvtTest extends bvtTestSetup {
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         String query2 = "SELECT * FROM " + table2.getEscapedTableName();
         System.out.println("starting testTwoResultsetsDifferentStmt");
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt1 = conn.createStatement();
-             DBStatement stmt2 = conn.createStatement()) {
-
-            DBResultSet rs1 = stmt1.executeQuery(query);
-            DBResultSet rs2 = stmt2.executeQuery(query2);
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt1 = conn.createStatement();
+             Statement stmt2 = conn.createStatement()) {
+            
+            ResultSet rsjdbc1 = stmt1.executeQuery(query);
+            DBResultSet rs1 = new DBResultSet(null, rsjdbc1);
+                    
+            ResultSet rsjdbc2 = stmt2.executeQuery(query2);
+            DBResultSet rs2 = new DBResultSet(null, rsjdbc2);
             
             // Interleave resultset calls
             rs1.next();
@@ -407,11 +428,14 @@ public class bvtTest extends bvtTestSetup {
         String query = "SELECT * FROM " + table1.getEscapedTableName();
         String query2 = "SELECT * FROM " + table2.getEscapedTableName();
         System.out.println("starting testTwoResultsetsSameStmt");
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement()) {
 
-            DBResultSet rs1 = stmt.executeQuery(query);
-            DBResultSet rs2 = stmt.executeQuery(query2);
+            ResultSet rsjdbc1 = stmt.executeQuery(query);
+            DBResultSet rs1 = new DBResultSet(null, rsjdbc1);
+                    
+            ResultSet rsjdbc2 = stmt.executeQuery(query2);
+            DBResultSet rs2 = new DBResultSet(null, rsjdbc2);
             // Interleave resultset calls. rs is expected to be closed
             try {
                 rs1.next();
@@ -444,9 +468,10 @@ public class bvtTest extends bvtTestSetup {
     public void testResultSetAndCloseStmt() throws SQLException {
         System.out.println("starting testResultSetAndCloseStmt");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement();
-             DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement();
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
 
             stmt.close(); // this should close the resultSet
             try {
@@ -469,9 +494,10 @@ public class bvtTest extends bvtTestSetup {
     public void testResultSetSelectMethod() throws SQLException {
         System.out.println("starting testResultSetSelectMethod");
         String query = "SELECT * FROM " + table1.getEscapedTableName();
-        try (DBConnection conn = new DBConnection(connectionString + ";selectMethod=cursor;");
-             DBStatement stmt = conn.createStatement();
-             DBResultSet rs = stmt.executeQuery(query)) {
+        try (Connection conn = DriverManager.getConnection(connectionString + ";selectMethod=cursor;");
+             Statement stmt = conn.createStatement();
+            ResultSet rsjdbc = stmt.executeQuery(query);
+            DBResultSet rs = new DBResultSet(null, rsjdbc)) {
             rs.verify(table1);
         }
         System.out.println("ending testResultSetSelectMethod");
@@ -485,8 +511,8 @@ public class bvtTest extends bvtTestSetup {
     @AfterEach
     public void terminate() throws SQLException {
 
-        try (DBConnection conn = new DBConnection(connectionString);
-             DBStatement stmt = conn.createStatement()) {
+        try (Connection conn = DriverManager.getConnection(connectionString);
+             Statement stmt = conn.createStatement()) {
             stmt.execute("if object_id('" + table1.getEscapedTableName() + "','U') is not null" + " drop table " + table1.getEscapedTableName());
             stmt.execute("if object_id('" + table2.getEscapedTableName() + "','U') is not null" + " drop table " + table2.getEscapedTableName());
         }

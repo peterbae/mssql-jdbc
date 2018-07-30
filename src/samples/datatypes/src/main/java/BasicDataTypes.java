@@ -139,7 +139,7 @@ public class BasicDataTypes {
             pstmt.setObject(6, 56.78);
             pstmt.setObject(7, new Date(1453500034839L));
             pstmt.setObject(8, new Date(1453500034839L));
-            pstmt.setObject(9, new Time(1453500034839L));
+            pstmt.setObject(9, new java.util.Date(1453500034839L));
             pstmt.setObject(10, new Date(1453500034839L));
             pstmt.setObject(11, new Date(1453500034839L));
             pstmt.execute();

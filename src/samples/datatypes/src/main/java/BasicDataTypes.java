@@ -16,6 +16,7 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 
+import com.microsoft.sqlserver.jdbc.SQLServerDataSource;
 import com.microsoft.sqlserver.jdbc.SQLServerResultSet;
 
 import microsoft.sql.DateTimeOffset;
@@ -47,12 +48,16 @@ public class BasicDataTypes {
             System.out.print("Enter password: ");
             password = br.readLine();
 
-            // Create a variable for the connection string.
-            String connectionUrl = "jdbc:sqlserver://" + serverName + ":" + portNumber + ";" + "databaseName="
-                    + databaseName + ";username=" + username + ";password=" + password + ";";
+            // Establish the connection.
+            SQLServerDataSource ds = new SQLServerDataSource();
+            ds.setServerName(serverName);
+            ds.setPortNumber(Integer.parseInt(portNumber));
+            ds.setDatabaseName(databaseName);
+            ds.setUser(username);
+            ds.setPassword(password);
 
             // Establish the connection.
-            try (Connection con = DriverManager.getConnection(connectionUrl); Statement stmt = con.createStatement()) {
+            try (Connection con = ds.getConnection(); Statement stmt = con.createStatement();) {
                 dropAndCreateTable(stmt);
                 insertOriginalData(con);
 
@@ -135,7 +140,7 @@ public class BasicDataTypes {
             pstmt.setObject(6, 56.78);
             pstmt.setObject(7, new Date(1453500034839L));
             pstmt.setObject(8, new Date(1453500034839L));
-            pstmt.setObject(9, new Date(1453500034839L));
+            pstmt.setObject(9, new Time(1453500034839L));
             pstmt.setObject(10, new Date(1453500034839L));
             pstmt.setObject(11, new Date(1453500034839L));
             pstmt.execute();

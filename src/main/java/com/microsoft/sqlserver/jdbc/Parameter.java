@@ -129,7 +129,6 @@ final class Parameter {
     }
 
     int scale = 0;
-    int precision = 0;
 
     // Scale requested for a DECIMAL and NUMERIC OUT parameter. If the OUT parameter
     // is also non-null IN parameter, the scale will be the larger of this value and
@@ -532,9 +531,13 @@ final class Parameter {
                         if (userProvidesPrecision) {
                             param.typeDefinition = "decimal(" + valueLength + "," + scale + ")";
                         }
-                    } else
-                        param.typeDefinition = "decimal(" + precision + "," + scale + ")";
-
+                    } else {
+                        if (userProvidesPrecision) {
+                            param.typeDefinition = "decimal(" + valueLength + "," + scale + ")";
+                        } else {
+                            param.typeDefinition = "decimal(" + SQLServerConnection.maxDecimalPrecision + "," + scale + ")";
+                        }
+                    }
                     break;
 
                 case MONEY:
@@ -980,7 +983,7 @@ final class Parameter {
             if (null != bigDecimalValue) {
                 userProvidesPrecision = true;
                 scale = bigDecimalValue.scale();
-                precision = bigDecimalValue.precision();
+                valueLength = bigDecimalValue.precision();
 
                 // BigDecimal in JRE 1.5 and later JVMs exposes an implementation detail
                 // that allows representation of large values in small space by interpreting

@@ -139,14 +139,59 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
     private SqlFedAuthToken fedAuthToken = null;
 
     private String originalHostNameInCertificate = null;
+    
+    protected class EngineEdition {
+        private final int ENGINE_EDITION_FOR_SQL_AZURE = 5;
+        private final int ENGINE_EDITION_FOR_SQL_AZURE_DW = 6;
+        private final int ENGINE_EDITION_FOR_SQL_AZURE_MI = 8;
+        private Integer engineEdition = null;
+        
+        /*
+         * SERVERPROPERTY('EngineEdition') can be used to determine whether the db server is SQL Azure. It should return 6
+         * for SQL Azure DW. This is more reliable than @@version or serverproperty('edition'). Reference:
+         * http://msdn.microsoft.com/en-us/library/ee336261.aspx SERVERPROPERTY('EngineEdition') means Database Engine
+         * edition of the instance of SQL Server installed on the server. 1 = Personal or Desktop Engine (Not available for
+         * SQL Server.) 2 = Standard (This is returned for Standard and Workgroup.) 3 = Enterprise (This is returned for
+         * Enterprise, Enterprise Evaluation, and Developer.) 4 = Express (This is returned for Express, Express with
+         * Advanced Services, and Windows Embedded SQL.) 5 = SQL Azure 6 = SQL Azure DW 8 = Managed Instance Base data type:
+         * int
+         */
+        private void initEngineEdition() {
+            try (Statement stmt = createStatement();
+                    ResultSet rs = stmt.executeQuery("SELECT CAST(SERVERPROPERTY('EngineEdition') as INT)")) {
+                rs.next();
+                engineEdition = rs.getInt(1);
+            } catch (SQLException e) {
+                if (loggerExternal.isLoggable(java.util.logging.Level.FINER))
+                    loggerExternal.log(Level.FINER, this + ": Error retrieving server type", e);
+                engineEdition = null;
+            }
+        }
+        
+        protected boolean isAzure() {
+            if (null == engineEdition) {
+                initEngineEdition();
+            }
+            return (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW
+                    || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI);
+        }
 
-    final int ENGINE_EDITION_FOR_SQL_AZURE = 5;
-    final int ENGINE_EDITION_FOR_SQL_AZURE_DW = 6;
-    final int ENGINE_EDITION_FOR_SQL_AZURE_MI = 8;
-    private Boolean isAzure = null;
-    private Boolean isAzureDW = null;
-    private Boolean isAzureMI = null;
+        protected boolean isAzureDW() {
+            if (null == engineEdition) {
+                initEngineEdition();
+            }
+            return engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW;
+        }
 
+        protected boolean isAzureMI() {
+            if (null == engineEdition) {
+                initEngineEdition();
+            }
+            return engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI;
+        }
+    }
+    
+    protected EngineEdition serverEngineEdition = new EngineEdition();
     private SharedTimer sharedTimer;
 
     /**
@@ -6229,56 +6274,6 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
         }
     }
     
-    /*
-     * SERVERPROPERTY('EngineEdition') can be used to determine whether the db server is SQL Azure.
-     * It should return 6 for SQL Azure DW. This is more reliable than @@version or
-     * serverproperty('edition').
-     * Reference: http://msdn.microsoft.com/en-us/library/ee336261.aspx
-     * 
-     * SERVERPROPERTY('EngineEdition') means
-     * Database Engine edition of the instance of SQL Server installed on the server.
-     * 1 = Personal or Desktop Engine (Not available for SQL Server.)
-     * 2 = Standard (This is returned for Standard and Workgroup.)
-     * 3 = Enterprise (This is returned for Enterprise, Enterprise Evaluation, and Developer.)
-     * 4 = Express (This is returned for Express, Express with Advanced Services, and Windows Embedded SQL.)
-     * 5 = SQL Azure
-     * 6 = SQL Azure DW
-     * 8 = Managed Instance
-     * Base data type: int
-     */
-    boolean isAzure() {
-        if (null == isAzure) {
-            try (Statement stmt = this.createStatement(); ResultSet rs = stmt.executeQuery("SELECT CAST(SERVERPROPERTY('EngineEdition') as INT)")) {
-                rs.next();
-
-                int engineEdition = rs.getInt(1);
-                isAzure = (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI);
-                isAzureDW = (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW);
-                isAzureMI = (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI);
-
-            } catch (SQLException e) {
-                if (loggerExternal.isLoggable(java.util.logging.Level.FINER))
-                    loggerExternal.log(Level.FINER, this + ": Error retrieving server type", e);
-                isAzure = false;
-                isAzureDW = false;
-                isAzureMI = false;
-            }
-            return isAzure;
-        } else {
-            return isAzure;
-        }
-    }
-
-    boolean isAzureDW() {
-        isAzure();
-        return isAzureDW;
-    }
-
-    boolean isAzureMI() {
-        isAzure();
-        return isAzureMI;
-    }
-
     /**
      * Adds statement to openStatements
      * 

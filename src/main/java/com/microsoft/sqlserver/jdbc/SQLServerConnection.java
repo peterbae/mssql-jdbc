@@ -139,22 +139,23 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
     private SqlFedAuthToken fedAuthToken = null;
 
     private String originalHostNameInCertificate = null;
-    
+
     protected class EngineEdition {
-        private final int ENGINE_EDITION_FOR_SQL_AZURE = 5;
-        private final int ENGINE_EDITION_FOR_SQL_AZURE_DW = 6;
-        private final int ENGINE_EDITION_FOR_SQL_AZURE_MI = 8;
-        private Integer engineEdition = null;
-        
+        static final int ENGINE_EDITION_FOR_SQL_AZURE = 5;
+        static final int ENGINE_EDITION_FOR_SQL_AZURE_DW = 6;
+        static final int ENGINE_EDITION_FOR_SQL_AZURE_MI = 8;
+        private int engineEdition = -1;
+
+        private EngineEdition() {};
         /*
-         * SERVERPROPERTY('EngineEdition') can be used to determine whether the db server is SQL Azure. It should return 6
-         * for SQL Azure DW. This is more reliable than @@version or serverproperty('edition'). Reference:
+         * SERVERPROPERTY('EngineEdition') can be used to determine whether the db server is SQL Azure. It should return
+         * 6 for SQL Azure DW. This is more reliable than @@version or serverproperty('edition'). Reference:
          * http://msdn.microsoft.com/en-us/library/ee336261.aspx SERVERPROPERTY('EngineEdition') means Database Engine
-         * edition of the instance of SQL Server installed on the server. 1 = Personal or Desktop Engine (Not available for
-         * SQL Server.) 2 = Standard (This is returned for Standard and Workgroup.) 3 = Enterprise (This is returned for
-         * Enterprise, Enterprise Evaluation, and Developer.) 4 = Express (This is returned for Express, Express with
-         * Advanced Services, and Windows Embedded SQL.) 5 = SQL Azure 6 = SQL Azure DW 8 = Managed Instance Base data type:
-         * int
+         * edition of the instance of SQL Server installed on the server. 1 = Personal or Desktop Engine (Not available
+         * for SQL Server.) 2 = Standard (This is returned for Standard and Workgroup.) 3 = Enterprise (This is returned
+         * for Enterprise, Enterprise Evaluation, and Developer.) 4 = Express (This is returned for Express, Express
+         * with Advanced Services, and Windows Embedded SQL.) 5 = SQL Azure 6 = SQL Azure DW 8 = Managed Instance Base
+         * data type: int
          */
         private void initEngineEdition() {
             try (Statement stmt = createStatement();
@@ -164,33 +165,24 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
             } catch (SQLException e) {
                 if (loggerExternal.isLoggable(java.util.logging.Level.FINER))
                     loggerExternal.log(Level.FINER, this + ": Error retrieving server type", e);
-                engineEdition = null;
+                engineEdition = -1;
             }
-        }
-        
-        protected boolean isAzure() {
-            if (null == engineEdition) {
-                initEngineEdition();
-            }
-            return (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW
-                    || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI);
         }
 
-        protected boolean isAzureDW() {
-            if (null == engineEdition) {
+        protected boolean isServerEngineEdition(int targetEngineEdition) {
+            if (engineEdition < 0) {
                 initEngineEdition();
             }
-            return engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW;
-        }
 
-        protected boolean isAzureMI() {
-            if (null == engineEdition) {
-                initEngineEdition();
+            if (targetEngineEdition == ENGINE_EDITION_FOR_SQL_AZURE) {
+                return (engineEdition == ENGINE_EDITION_FOR_SQL_AZURE
+                        || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_DW
+                        || engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI);
             }
-            return engineEdition == ENGINE_EDITION_FOR_SQL_AZURE_MI;
+            return (engineEdition == targetEngineEdition);
         }
     }
-    
+
     protected EngineEdition serverEngineEdition = new EngineEdition();
     private SharedTimer sharedTimer;
 
@@ -6273,7 +6265,7 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
             }
         }
     }
-    
+
     /**
      * Adds statement to openStatements
      * 

@@ -147,6 +147,7 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
         private int engineEdition = -1;
 
         private EngineEdition() {};
+
         /*
          * SERVERPROPERTY('EngineEdition') can be used to determine whether the db server is SQL Azure. It should return
          * 6 for SQL Azure DW. This is more reliable than @@version or serverproperty('edition'). Reference:
@@ -184,7 +185,7 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
     }
 
     private EngineEdition serverEngineEdition = new EngineEdition();
-    
+
     boolean isServerEngine(int engineEdition) {
         return serverEngineEdition.checkEngineEdition(engineEdition);
     }

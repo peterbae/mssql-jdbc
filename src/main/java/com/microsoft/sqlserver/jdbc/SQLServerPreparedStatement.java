@@ -1950,8 +1950,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
         localUserSQL = userSQL;
 
         try {
-            if (this.useBulkCopyForBatchInsert && connection.serverEngineEdition
-                    .isServerEngineEdition(EngineEdition.ENGINE_EDITION_FOR_SQL_AZURE_DW) && isInsert(localUserSQL)) {
+            if (this.useBulkCopyForBatchInsert && connection.isServerEngine(EngineEdition.ENGINE_EDITION_FOR_SQL_AZURE_DW) && isInsert(localUserSQL)) {
                 if (null == batchParamValues) {
                     updateCounts = new int[0];
                     loggerExternal.exiting(getClassNameLogging(), "executeBatch", updateCounts);
@@ -2108,8 +2107,7 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
         localUserSQL = userSQL;
 
         try {
-            if (this.useBulkCopyForBatchInsert && connection.serverEngineEdition
-                    .isServerEngineEdition(EngineEdition.ENGINE_EDITION_FOR_SQL_AZURE_DW) && isInsert(localUserSQL)) {
+            if (this.useBulkCopyForBatchInsert && connection.isServerEngine(EngineEdition.ENGINE_EDITION_FOR_SQL_AZURE_DW) && isInsert(localUserSQL)) {
                 if (null == batchParamValues) {
                     updateCounts = new long[0];
                     loggerExternal.exiting(getClassNameLogging(), "executeLargeBatch", updateCounts);

@@ -169,7 +169,7 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
             }
         }
 
-        protected boolean isServerEngineEdition(int targetEngineEdition) {
+        private boolean checkEngineEdition(int targetEngineEdition) {
             if (engineEdition < 0) {
                 initEngineEdition();
             }
@@ -183,7 +183,12 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
         }
     }
 
-    protected EngineEdition serverEngineEdition = new EngineEdition();
+    private EngineEdition serverEngineEdition = new EngineEdition();
+    
+    boolean isServerEngine(int engineEdition) {
+        return serverEngineEdition.checkEngineEdition(engineEdition);
+    }
+
     private SharedTimer sharedTimer;
 
     /**

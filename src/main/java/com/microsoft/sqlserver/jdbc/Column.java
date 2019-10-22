@@ -6,7 +6,7 @@
 package com.microsoft.sqlserver.jdbc;
 
 import java.text.MessageFormat;
-import java.util.Calendar;
+import java.time.ZoneId;
 
 
 /**
@@ -185,9 +185,9 @@ final class Column {
      *
      * If the column has not yet been read from the response then this method reads it.
      */
-    Object getValue(JDBCType jdbcType, InputStreamGetterArgs getterArgs, Calendar cal,
+    Object getValue(JDBCType jdbcType, InputStreamGetterArgs getterArgs, ZoneId zid,
             TDSReader tdsReader) throws SQLServerException {
-        Object value = getterDTV.getValue(jdbcType, typeInfo.getScale(), getterArgs, cal, typeInfo, cryptoMetadata,
+        Object value = getterDTV.getValue(jdbcType, typeInfo.getScale(), getterArgs, zid, typeInfo, cryptoMetadata,
                 tdsReader);
         setInternalVariant(getterDTV.getInternalVariant());
         return (null != filter) ? filter.apply(value, jdbcType) : value;
@@ -198,7 +198,7 @@ final class Column {
     }
 
     void updateValue(JDBCType jdbcType, Object value, JavaType javaType, StreamSetterArgs streamSetterArgs,
-            Calendar cal, Integer scale, SQLServerConnection con,
+            ZoneId zid, Integer scale, SQLServerConnection con,
             SQLServerStatementColumnEncryptionSetting stmtColumnEncriptionSetting, Integer precision,
             boolean forceEncrypt, int parameterIndex) throws SQLServerException {
         SSType ssType = typeInfo.getSSType();
@@ -369,7 +369,7 @@ final class Column {
 
         // Set the column's value
 
-        updaterDTV.setValue(typeInfo.getSQLCollation(), jdbcType, value, javaType, streamSetterArgs, cal, scale, con,
+        updaterDTV.setValue(typeInfo.getSQLCollation(), jdbcType, value, javaType, streamSetterArgs, zid, scale, con,
                 false);
     }
 

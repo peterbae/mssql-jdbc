@@ -24,10 +24,11 @@ import java.sql.SQLXML;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
+import java.time.ZoneId;
 import java.util.Calendar;
 import java.util.HashMap;
-import java.util.TreeMap;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -434,7 +435,8 @@ public class SQLServerCallableStatement extends SQLServerPreparedStatement imple
     }
 
     private Object getValue(int parameterIndex, JDBCType jdbcType, Calendar cal) throws SQLServerException {
-        return getterGetParam(parameterIndex).getValue(jdbcType, null, cal, resultsReader());
+        ZoneId zid = cal.getTimeZone().toZoneId();
+        return getterGetParam(parameterIndex).getValue(jdbcType, null, zid, resultsReader());
     }
 
     private Object getStream(int parameterIndex, StreamType streamType) throws SQLServerException {

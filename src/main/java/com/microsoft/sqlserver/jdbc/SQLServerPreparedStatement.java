@@ -22,6 +22,7 @@ import java.sql.SQLType;
 import java.sql.SQLXML;
 import java.sql.Statement;
 import java.text.MessageFormat;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -1162,7 +1163,8 @@ public class SQLServerPreparedStatement extends SQLServerStatement implements IS
 
     final void setValue(int parameterIndex, JDBCType jdbcType, Object value, JavaType javaType, Calendar cal,
             boolean forceEncrypt) throws SQLServerException {
-        setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, cal, null, null, connection,
+        ZoneId zid = cal.getTimeZone().toZoneId();
+        setterGetParam(parameterIndex).setValue(jdbcType, value, javaType, null, zid, null, null, connection,
                 forceEncrypt, stmtColumnEncriptionSetting, parameterIndex, userSQL, null);
     }
 

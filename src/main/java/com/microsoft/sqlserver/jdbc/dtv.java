@@ -30,13 +30,15 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.EnumMap;
 import java.util.GregorianCalendar;
 import java.util.Locale;
 import java.util.Map;
 import java.util.SimpleTimeZone;
-import java.util.TimeZone;
 import java.util.UUID;
 
 import com.microsoft.sqlserver.jdbc.JavaType.SetterConversionAE;
@@ -71,7 +73,7 @@ abstract class DTVExecuteOp {
 
     abstract void execute(DTV dtv, java.util.Date utilDateValue) throws SQLServerException;
 
-    abstract void execute(DTV dtv, java.util.Calendar calendarValue) throws SQLServerException;
+    abstract void execute(DTV dtv, ZonedDateTime zdtValue) throws SQLServerException;
 
     abstract void execute(DTV dtv, LocalDate localDateValue) throws SQLServerException;
 
@@ -139,12 +141,12 @@ final class DTV {
      * Doing this may change the DTV's internal implementation to an AppDTVImpl.
      */
     void setValue(SQLCollation collation, JDBCType jdbcType, Object value, JavaType javaType,
-            StreamSetterArgs streamSetterArgs, Calendar calendar, Integer scale, SQLServerConnection con,
+            StreamSetterArgs streamSetterArgs, ZoneId zid, Integer scale, SQLServerConnection con,
             boolean forceEncrypt) throws SQLServerException {
         if (null == impl)
             impl = new AppDTVImpl();
 
-        impl.setValue(this, collation, jdbcType, value, javaType, streamSetterArgs, calendar, scale, con, forceEncrypt);
+        impl.setValue(this, collation, jdbcType, value, javaType, streamSetterArgs, zid, scale, con, forceEncrypt);
     }
 
     final void setValue(Object value, JavaType javaType) {
@@ -173,8 +175,8 @@ final class DTV {
         impl.setStreamSetterArgs(streamSetterArgs);
     }
 
-    final void setCalendar(Calendar calendar) {
-        impl.setCalendar(calendar);
+    final void setZoneId(ZoneId zid) {
+        impl.setZoneId(zid);
     }
 
     final void setScale(Integer scale) {
@@ -189,8 +191,8 @@ final class DTV {
         return impl.getStreamSetterArgs();
     }
 
-    Calendar getCalendar() {
-        return impl.getCalendar();
+    ZoneId getZoneId() {
+        return impl.getZoneId();
     }
 
     Integer getScale() {
@@ -240,11 +242,11 @@ final class DTV {
      * This variant of getValue() takes an extra parameter to handle the few cases where extra arguments are needed to
      * determine the value (e.g. a Calendar object for time-valued DTV values).
      */
-    Object getValue(JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, Calendar cal,
+    Object getValue(JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, ZoneId zid,
             TypeInfo typeInfo, CryptoMetadata cryptoMetadata, TDSReader tdsReader) throws SQLServerException {
         if (null == impl)
             impl = new ServerDTVImpl();
-        return impl.getValue(this, jdbcType, scale, streamGetterArgs, cal, typeInfo, cryptoMetadata, tdsReader);
+        return impl.getValue(this, jdbcType, scale, streamGetterArgs, zid, typeInfo, cryptoMetadata, tdsReader);
     }
 
     Object getSetterValue() {
@@ -349,8 +351,8 @@ final class DTV {
             sendTemporal(dtv, JavaType.UTILDATE, utilDateValue);
         }
 
-        void execute(DTV dtv, java.util.Calendar calendarValue) throws SQLServerException {
-            sendTemporal(dtv, JavaType.CALENDAR, calendarValue);
+        void execute(DTV dtv, ZonedDateTime zdtValue) throws SQLServerException {
+            sendTemporal(dtv, JavaType.CALENDAR, zdtValue);
         }
 
         void execute(DTV dtv, LocalDate localDateValue) throws SQLServerException {
@@ -446,7 +448,7 @@ final class DTV {
              * not be Gregorian...
              */
             if (null != value) {
-                TimeZone timeZone = TimeZone.getDefault(); // Time zone to associate with the value in the Gregorian
+                ZoneId timeZone = ZoneId.systemDefault(); // Time zone to associate with the value in the Gregorian
                                                            // calendar
                 long utcMillis = 0; // Value to which the calendar is to be set (in milliseconds 1/1/1970 00:00:00 GMT)
 
@@ -454,8 +456,9 @@ final class DTV {
                 switch (javaType) {
                     case TIME: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        if (null != dtv.getZoneId()) {
+                            timeZone = dtv.getZoneId();
+                        }
 
                         utcMillis = ((java.sql.Time) value).getTime();
                         subSecondNanos = Nanos.PER_MILLISECOND * (int) (utcMillis % 1000);
@@ -475,8 +478,9 @@ final class DTV {
 
                     case DATE: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        if (null != dtv.getZoneId()) {
+                            timeZone = dtv.getZoneId();
+                        }
 
                         utcMillis = ((java.sql.Date) value).getTime();
                         break;
@@ -484,8 +488,9 @@ final class DTV {
 
                     case TIMESTAMP: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        if (null != dtv.getZoneId()) {
+                            timeZone = dtv.getZoneId();
+                        }
 
                         java.sql.Timestamp timestampValue = (java.sql.Timestamp) value;
                         utcMillis = timestampValue.getTime();
@@ -497,8 +502,9 @@ final class DTV {
                         // java.util.Date is mapped to JDBC type TIMESTAMP
                         // java.util.Date and java.sql.Date are both millisecond precision
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        if (null != dtv.getZoneId()) {
+                            timeZone = dtv.getZoneId();
+                        }
 
                         utcMillis = ((java.util.Date) value).getTime();
 
@@ -523,8 +529,8 @@ final class DTV {
                         // java.util.Calendar is mapped to JDBC type TIMESTAMP
                         // java.util.Calendar is millisecond precision
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getZoneId()) ? dtv.getZoneId().getZone()
+                                                               : ZoneId.systemDefault();
 
                         utcMillis = ((java.util.Calendar) value).getTimeInMillis();
 
@@ -687,7 +693,7 @@ final class DTV {
 
                         // microsoft.sql.DateTimeOffset values have a time zone offset that is internal
                         // to the value, so there should not be any DTV calendar for DateTimeOffset values.
-                        assert null == dtv.getCalendar();
+                        assert null == dtv.getZoneId();
 
                         // If the target data type is DATETIMEOFFSET, then use UTC for the calendar that
                         // will hold the value, since writeRPCDateTimeOffset expects a UTC calendar.
@@ -700,10 +706,8 @@ final class DTV {
                                         || SSType.VARBINARYMAX == typeInfo.getSSType())) ?
 
                                                                                          UTC.timeZone
-                                                                                         : new SimpleTimeZone(
-                                                                                                 minutesOffset * 60
-                                                                                                         * 1000,
-                                                                                                 "");
+                                                                                         : ZoneOffset.ofTotalSeconds(
+                                                                                                 minutesOffset * 60);
 
                         break;
                     }
@@ -1672,8 +1676,8 @@ final class DTV {
                     op.execute(this, (java.util.Date) value);
                     break;
 
-                case CALENDAR:
-                    op.execute(this, (java.util.Calendar) value);
+                case ZONEDDATETIME:
+                    op.execute(this, (ZonedDateTime) value);
                     break;
 
                 case LOCALDATE:
@@ -1923,14 +1927,14 @@ final class DTV {
  */
 abstract class DTVImpl {
     abstract void setValue(DTV dtv, SQLCollation collation, JDBCType jdbcType, Object value, JavaType javaType,
-            StreamSetterArgs streamSetterArgs, Calendar cal, Integer scale, SQLServerConnection con,
+            StreamSetterArgs streamSetterArgs, ZoneId zid, Integer scale, SQLServerConnection con,
             boolean forceEncrypt) throws SQLServerException;
 
     abstract void setValue(Object value, JavaType javaType);
 
     abstract void setStreamSetterArgs(StreamSetterArgs streamSetterArgs);
 
-    abstract void setCalendar(Calendar cal);
+    abstract void setZoneId(ZoneId zid);
 
     abstract void setScale(Integer scale);
 
@@ -1938,7 +1942,7 @@ abstract class DTVImpl {
 
     abstract StreamSetterArgs getStreamSetterArgs();
 
-    abstract Calendar getCalendar();
+    abstract ZoneId getZoneId();
 
     abstract Integer getScale();
 
@@ -1951,7 +1955,7 @@ abstract class DTVImpl {
     abstract JavaType getJavaType();
 
     abstract Object getValue(DTV dtv, JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs,
-            Calendar cal, TypeInfo type, CryptoMetadata cryptoMetadata, TDSReader tdsReader) throws SQLServerException;
+            ZoneId zid, TypeInfo type, CryptoMetadata cryptoMetadata, TDSReader tdsReader) throws SQLServerException;
 
     abstract Object getSetterValue();
 
@@ -1971,7 +1975,7 @@ final class AppDTVImpl extends DTVImpl {
     private Object value;
     private JavaType javaType;
     private StreamSetterArgs streamSetterArgs;
-    private Calendar cal;
+    private ZoneId zid;
     private Integer scale;
     @SuppressWarnings("unused")
     private boolean forceEncrypt;
@@ -2124,10 +2128,10 @@ final class AppDTVImpl extends DTVImpl {
             }
         }
 
-        void execute(DTV dtv, java.util.Calendar calendarValue) throws SQLServerException {
+        void execute(DTV dtv, ZonedDateTime zdtValue) throws SQLServerException {
             if (dtv.getJdbcType().isTextual()) {
-                assert calendarValue != null : "value is null";
-                dtv.setValue(calendarValue.toString(), JavaType.STRING);
+                assert zdtValue != null : "value is null";
+                dtv.setValue(zdtValue.toString(), JavaType.STRING);
             }
         }
 
@@ -2264,13 +2268,13 @@ final class AppDTVImpl extends DTVImpl {
     }
 
     void setValue(DTV dtv, SQLCollation collation, JDBCType jdbcType, Object value, JavaType javaType,
-            StreamSetterArgs streamSetterArgs, Calendar cal, Integer scale, SQLServerConnection con,
+            StreamSetterArgs streamSetterArgs, ZoneId zid, Integer scale, SQLServerConnection con,
             boolean forceEncrypt) throws SQLServerException {
         // Set the value according to its Java object type, nullness, and specified JDBC type
         dtv.setValue(value, javaType);
         dtv.setJdbcType(jdbcType);
         dtv.setStreamSetterArgs(streamSetterArgs);
-        dtv.setCalendar(cal);
+        dtv.setZoneId(zid);
         dtv.setScale(scale);
         dtv.setForceEncrypt(forceEncrypt);
         dtv.executeOp(new SetValueOp(collation, con));
@@ -2285,8 +2289,8 @@ final class AppDTVImpl extends DTVImpl {
         this.streamSetterArgs = streamSetterArgs;
     }
 
-    void setCalendar(Calendar cal) {
-        this.cal = cal;
+    void setZoneId(ZoneId zid) {
+        this.zid = zid;
     }
 
     void setScale(Integer scale) {
@@ -2301,8 +2305,8 @@ final class AppDTVImpl extends DTVImpl {
         return streamSetterArgs;
     }
 
-    Calendar getCalendar() {
-        return cal;
+    ZoneId getZoneId() {
+        return zid;
     }
 
     Integer getScale() {
@@ -2325,7 +2329,7 @@ final class AppDTVImpl extends DTVImpl {
         return javaType;
     }
 
-    Object getValue(DTV dtv, JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, Calendar cal,
+    Object getValue(DTV dtv, JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, ZoneId zid,
             TypeInfo typeInfo, CryptoMetadata cryptoMetadata, TDSReader tdsReader) throws SQLServerException {
         // Client side type conversion is not supported
         if (this.jdbcType != jdbcType)
@@ -3244,10 +3248,10 @@ final class ServerDTVImpl extends DTVImpl {
      * types). So this implementation sets the new value in a new AppDTVImpl instance.
      */
     void setValue(DTV dtv, SQLCollation collation, JDBCType jdbcType, Object value, JavaType javaType,
-            StreamSetterArgs streamSetterArgs, Calendar cal, Integer scale, SQLServerConnection con,
+            StreamSetterArgs streamSetterArgs, ZoneId zid, Integer scale, SQLServerConnection con,
             boolean forceEncrypt) throws SQLServerException {
         dtv.setImpl(new AppDTVImpl());
-        dtv.setValue(collation, jdbcType, value, javaType, streamSetterArgs, cal, scale, con, forceEncrypt);
+        dtv.setValue(collation, jdbcType, value, javaType, streamSetterArgs, zid, scale, con, forceEncrypt);
     }
 
     void setValue(Object value, JavaType javaType) {
@@ -3270,7 +3274,7 @@ final class ServerDTVImpl extends DTVImpl {
         assert false;
     }
 
-    void setCalendar(Calendar calendar) {
+    void setZoneId(ZoneId calendar) {
         // This function is never called, but must be implemented; it's abstract in DTVImpl.
         assert false;
     }
@@ -3291,7 +3295,7 @@ final class ServerDTVImpl extends DTVImpl {
         return null;
     }
 
-    Calendar getCalendar() {
+    ZoneId getZoneId() {
         // This function is never called, but must be implemented; it's abstract in DTVImpl.
         assert false;
         return null;
@@ -3638,7 +3642,7 @@ final class ServerDTVImpl extends DTVImpl {
                 int localMinutesOffset = ByteBuffer.wrap(offsetPortion).order(ByteOrder.LITTLE_ENDIAN).getShort();
 
                 return DDC.convertTemporalToObject(jdbcType, SSType.DATETIMEOFFSET,
-                        new GregorianCalendar(new SimpleTimeZone(localMinutesOffset * 60 * 1000, ""), Locale.US),
+                        ZoneOffset.ofTotalSeconds(localMinutesOffset * 60),
                         daysIntoCE, localNanosSinceMidnight, baseTypeInfo.getScale());
 
             }
@@ -3653,7 +3657,7 @@ final class ServerDTVImpl extends DTVImpl {
         }
     }
 
-    Object getValue(DTV dtv, JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, Calendar cal,
+    Object getValue(DTV dtv, JDBCType jdbcType, int scale, InputStreamGetterArgs streamGetterArgs, ZoneId zid,
             TypeInfo typeInfo, CryptoMetadata cryptoMetadata, TDSReader tdsReader) throws SQLServerException {
         SQLServerConnection con = tdsReader.getConnection();
         Object convertedValue = null;
@@ -3732,7 +3736,7 @@ final class ServerDTVImpl extends DTVImpl {
 
                 decryptedValue = SQLServerSecurityUtility.decryptWithKey((byte[]) convertedValue, cryptoMetadata, con);
                 return denormalizedValue(decryptedValue, jdbcType, cryptoMetadata.baseTypeInfo, con, streamGetterArgs,
-                        cryptoMetadata.normalizationRuleVersion, cal);
+                        cryptoMetadata.normalizationRuleVersion, zid);
             }
 
             switch (baseSSType) {

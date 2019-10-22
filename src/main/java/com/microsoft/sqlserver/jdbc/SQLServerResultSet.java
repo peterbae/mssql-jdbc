@@ -23,6 +23,7 @@ import java.sql.SQLType;
 import java.sql.SQLWarning;
 import java.sql.SQLXML;
 import java.text.MessageFormat;
+import java.time.ZoneId;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
@@ -2049,7 +2050,8 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
 
     private Object getValue(int columnIndex, JDBCType jdbcType, InputStreamGetterArgs getterArgs,
             Calendar cal) throws SQLServerException {
-        Object o = getterGetColumn(columnIndex).getValue(jdbcType, getterArgs, cal, tdsReader);
+        ZoneId zid = cal.getTimeZone().toZoneId();
+        Object o = getterGetColumn(columnIndex).getValue(jdbcType, getterArgs, zid, tdsReader);
         lastValueWasNull = (null == o);
         return o;
     }
@@ -3093,7 +3095,8 @@ public class SQLServerResultSet implements ISQLServerResultSet, java.io.Serializ
 
     private void updateValue(int columnIndex, JDBCType jdbcType, Object value, JavaType javaType, Calendar cal,
             boolean forceEncrypt) throws SQLServerException {
-        updaterGetColumn(columnIndex).updateValue(jdbcType, value, javaType, null, cal, null, stmt.connection,
+        ZoneId zid = cal.getTimeZone().toZoneId();
+        updaterGetColumn(columnIndex).updateValue(jdbcType, value, javaType, null, zid, null, stmt.connection,
                 stmt.stmtColumnEncriptionSetting, null, forceEncrypt, columnIndex);
     }
 

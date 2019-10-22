@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.time.ZonedDateTime;
 import java.util.EnumMap;
 import java.util.EnumSet;
 
@@ -403,6 +404,7 @@ enum JavaType {
     LOCALDATE(getJavaClass("LocalDate"), JDBCType.DATE),
     LOCALTIME(getJavaClass("LocalTime"), JDBCType.TIME),
     LOCALDATETIME(getJavaClass("LocalDateTime"), JDBCType.TIMESTAMP),
+    ZONEDDATETIME(getJavaClass("ZonedDateTime"), JDBCType.TIMESTAMP),
     OFFSETTIME(getJavaClass("OffsetTime"), JDBCType.TIME_WITH_TIMEZONE),
     OFFSETDATETIME(getJavaClass("OffsetDateTime"), JDBCType.TIMESTAMP_WITH_TIMEZONE),
     DATETIMEOFFSET(microsoft.sql.DateTimeOffset.class, JDBCType.DATETIMEOFFSET),
@@ -514,6 +516,8 @@ enum JavaType {
                 return LocalTime.class;
             case "LocalDateTime":
                 return LocalDateTime.class;
+            case "ZonedDateTime":
+                return ZonedDateTime.class;
             case "OffsetTime":
                 return OffsetTime.class;
             case "OffsetDateTime":

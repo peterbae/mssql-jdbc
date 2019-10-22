@@ -20,7 +20,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
-import java.util.Calendar;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Locale;
 
 
@@ -251,7 +252,7 @@ final class Parameter {
     }
 
     void setValue(JDBCType jdbcType, Object value, JavaType javaType, StreamSetterArgs streamSetterArgs,
-            Calendar calendar, Integer precision, Integer scale, SQLServerConnection con, boolean forceEncrypt,
+            ZoneId zid, Integer precision, Integer scale, SQLServerConnection con, boolean forceEncrypt,
             SQLServerStatementColumnEncryptionSetting stmtColumnEncriptionSetting, int parameterIndex, String userSQL,
             String tvpName) throws SQLServerException {
 
@@ -366,7 +367,7 @@ final class Parameter {
         }
 
         DTV newDTV = new DTV();
-        newDTV.setValue(con.getDatabaseCollation(), jdbcType, value, javaType, streamSetterArgs, calendar, scale, con,
+        newDTV.setValue(con.getDatabaseCollation(), jdbcType, value, javaType, streamSetterArgs, zid, scale, con,
                 forceEncrypt);
 
         if (!con.sendStringParametersAsUnicode()) {
@@ -388,7 +389,7 @@ final class Parameter {
 
     }
 
-    Object getValue(JDBCType jdbcType, InputStreamGetterArgs getterArgs, Calendar cal,
+    Object getValue(JDBCType jdbcType, InputStreamGetterArgs getterArgs, ZoneId zid,
             TDSReader tdsReader) throws SQLServerException {
         if (null == getterDTV)
             getterDTV = new DTV();
@@ -396,7 +397,7 @@ final class Parameter {
         deriveTypeInfo(tdsReader);
         // If the parameter is not encrypted or column encryption is turned off (either at connection or
         // statement level), cryptoMeta would be null.
-        return getterDTV.getValue(jdbcType, outScale, getterArgs, cal, typeInfo, cryptoMeta, tdsReader);
+        return getterDTV.getValue(jdbcType, outScale, getterArgs, zid, typeInfo, cryptoMeta, tdsReader);
     }
 
     Object getSetterValue() {
@@ -937,7 +938,7 @@ final class Parameter {
             setTypeDefinition(dtv);
         }
 
-        void execute(DTV dtv, java.util.Calendar calendarValue) throws SQLServerException {
+        void execute(DTV dtv, ZonedDateTime zdtValue) throws SQLServerException {
             setTypeDefinition(dtv);
         }
 

@@ -25,11 +25,15 @@ import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.SQLException;
 import java.text.MessageFormat;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.EnumMap;
 import java.util.GregorianCalendar;
@@ -383,33 +387,6 @@ final class DTV {
         }
 
         /**
-         * Clears the calendar and then sets only the fields passed in. Rest of the fields will have default values.
-         */
-        private void clearSetCalendar(Calendar cal, boolean lenient, Integer year, Integer month, Integer day_of_month,
-                Integer hour_of_day, Integer minute, Integer second) {
-            cal.clear();
-            cal.setLenient(lenient);
-            if (null != year) {
-                cal.set(Calendar.YEAR, year);
-            }
-            if (null != month) {
-                cal.set(Calendar.MONTH, month);
-            }
-            if (null != day_of_month) {
-                cal.set(Calendar.DAY_OF_MONTH, day_of_month);
-            }
-            if (null != hour_of_day) {
-                cal.set(Calendar.HOUR_OF_DAY, hour_of_day);
-            }
-            if (null != minute) {
-                cal.set(Calendar.MINUTE, minute);
-            }
-            if (null != second) {
-                cal.set(Calendar.SECOND, second);
-            }
-        }
-
-        /**
          * Sends the specified temporal type value to the server as the appropriate SQL Server type.
          *
          * To send the value to the server, this method does the following: 1) Converts its given temporal value
@@ -426,9 +403,9 @@ final class DTV {
          */
         private void sendTemporal(DTV dtv, JavaType javaType, Object value) throws SQLServerException {
             JDBCType jdbcType = dtv.getJdbcType();
-            GregorianCalendar calendar = null;
             int subSecondNanos = 0;
             int minutesOffset = 0;
+            ZonedDateTime zdt = null;
 
             /*
              * Some precisions to consider: java.sql.Time is millisecond precision java.sql.Timestamp is nanosecond
@@ -446,16 +423,16 @@ final class DTV {
              * not be Gregorian...
              */
             if (null != value) {
-                TimeZone timeZone = TimeZone.getDefault(); // Time zone to associate with the value in the Gregorian
-                                                           // calendar
+                ZoneId timeZone = ZoneId.systemDefault(); // Time zone to associate with the value in the Gregorian
+                                                          // calendar
                 long utcMillis = 0; // Value to which the calendar is to be set (in milliseconds 1/1/1970 00:00:00 GMT)
 
                 // Figure out the value components according to the type of the Java object passed in...
                 switch (javaType) {
                     case TIME: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone().toZoneId()
+                                                               : ZoneId.systemDefault();
 
                         utcMillis = ((java.sql.Time) value).getTime();
                         subSecondNanos = Nanos.PER_MILLISECOND * (int) (utcMillis % 1000);
@@ -475,8 +452,8 @@ final class DTV {
 
                     case DATE: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone().toZoneId()
+                                                               : ZoneId.systemDefault();
 
                         utcMillis = ((java.sql.Date) value).getTime();
                         break;
@@ -484,8 +461,8 @@ final class DTV {
 
                     case TIMESTAMP: {
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone().toZoneId()
+                                                               : ZoneId.systemDefault();
 
                         java.sql.Timestamp timestampValue = (java.sql.Timestamp) value;
                         utcMillis = timestampValue.getTime();
@@ -497,8 +474,8 @@ final class DTV {
                         // java.util.Date is mapped to JDBC type TIMESTAMP
                         // java.util.Date and java.sql.Date are both millisecond precision
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone().toZoneId()
+                                                               : ZoneId.systemDefault();
 
                         utcMillis = ((java.util.Date) value).getTime();
 
@@ -523,8 +500,8 @@ final class DTV {
                         // java.util.Calendar is mapped to JDBC type TIMESTAMP
                         // java.util.Calendar is millisecond precision
                         // Set the time zone from the calendar supplied by the app or use the JVM default
-                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone()
-                                                               : TimeZone.getDefault();
+                        timeZone = (null != dtv.getCalendar()) ? dtv.getCalendar().getTimeZone().toZoneId()
+                                                               : ZoneId.systemDefault();
 
                         utcMillis = ((java.util.Calendar) value).getTimeInMillis();
 
@@ -546,28 +523,15 @@ final class DTV {
                     }
 
                     case LOCALDATE:
-                        // Mapped to JDBC type DATE
-                        calendar = new GregorianCalendar(UTC.timeZone, Locale.US);
-
-                        // All time fields are set to default
-                        clearSetCalendar(calendar, true, ((LocalDate) value).getYear(),
-                                ((LocalDate) value).getMonthValue() - 1, // Calendar 'month'
-                                                                         // is 0-based, but
-                                                                         // LocalDate 'month'
-                                                                         // is 1-based
-                                ((LocalDate) value).getDayOfMonth(), null, null, null);
+                        zdt = ZonedDateTime.of(((LocalDate) value).getYear(), ((LocalDate) value).getMonthValue(),
+                                ((LocalDate) value).getDayOfMonth(), 0, 0, 0, 0, UTC.timeZone);
                         break;
 
                     case LOCALTIME:
-                        // Nanoseconds precision, mapped to JDBC type TIME
-                        calendar = new GregorianCalendar(UTC.timeZone, Locale.US);
-
                         // All date fields are set to default
                         LocalTime LocalTimeValue = ((LocalTime) value);
-                        clearSetCalendar(calendar, true, conn.baseYear(), 1, 1, LocalTimeValue.getHour(), // Gets
-                                                                                                          // hour_of_day
-                                                                                                          // field
-                                LocalTimeValue.getMinute(), LocalTimeValue.getSecond());
+                        zdt = ZonedDateTime.of(conn.baseYear(), 1, 1, LocalTimeValue.getHour(),
+                                LocalTimeValue.getMinute(), LocalTimeValue.getSecond(), 0, UTC.timeZone);
                         subSecondNanos = LocalTimeValue.getNano();
 
                         // Do not need to adjust subSecondNanos as in the case for TIME
@@ -575,15 +539,8 @@ final class DTV {
                         break;
 
                     case LOCALDATETIME:
-                        // Nanoseconds precision, mapped to JDBC type TIMESTAMP
-
-                        calendar = new GregorianCalendar(UTC.timeZone, Locale.US);
-                        // Calendar 'month' is 0-based, but LocalDateTime 'month' is 1-based
                         LocalDateTime localDateTimeValue = (LocalDateTime) value;
-                        clearSetCalendar(calendar, true, localDateTimeValue.getYear(),
-                                localDateTimeValue.getMonthValue() - 1, localDateTimeValue.getDayOfMonth(),
-                                localDateTimeValue.getHour(), // Gets hour_of_day field
-                                localDateTimeValue.getMinute(), localDateTimeValue.getSecond());
+                        zdt = ZonedDateTime.of(localDateTimeValue, UTC.timeZone);
                         subSecondNanos = localDateTimeValue.getNano();
 
                         // Do not need to adjust subSecondNanos as in the case for TIME
@@ -624,11 +581,10 @@ final class DTV {
                                 && (null == typeInfo || SSType.DATETIMEOFFSET == typeInfo.getSSType())) ?
 
                                                                                                         UTC.timeZone
-                                                                                                        : new SimpleTimeZone(
-                                                                                                                minutesOffset
-                                                                                                                        * 60
-                                                                                                                        * 1000,
-                                                                                                                "");
+                                                                                                        : ZoneOffset
+                                                                                                                .ofTotalSeconds(
+                                                                                                                        minutesOffset
+                                                                                                                                * 60);
 
                         LocalDate baseDate = LocalDate.of(conn.baseYear(), 1, 1);
                         utcMillis = offsetTimeValue.atDate(baseDate).toEpochSecond() * 1000;
@@ -670,11 +626,10 @@ final class DTV {
                                 || JDBCType.TIME_WITH_TIMEZONE == jdbcType)
                                 && (null == typeInfo || SSType.DATETIMEOFFSET == typeInfo.getSSType()))
                                                                                                         ? UTC.timeZone
-                                                                                                        : new SimpleTimeZone(
-                                                                                                                minutesOffset
-                                                                                                                        * 60
-                                                                                                                        * 1000,
-                                                                                                                "");
+                                                                                                        : ZoneOffset
+                                                                                                                .ofTotalSeconds(
+                                                                                                                        minutesOffset
+                                                                                                                                * 60);
 
                         utcMillis = offsetDateTimeValue.toEpochSecond() * 1000;
                         break;
@@ -700,36 +655,29 @@ final class DTV {
                                         || SSType.VARBINARYMAX == typeInfo.getSSType())) ?
 
                                                                                          UTC.timeZone
-                                                                                         : new SimpleTimeZone(
-                                                                                                 minutesOffset * 60
-                                                                                                         * 1000,
-                                                                                                 "");
-
+                                                                                         : ZoneOffset.ofTotalSeconds(
+                                                                                                 minutesOffset * 60);
                         break;
                     }
 
                     default:
                         throw new AssertionError("Unexpected JavaType: " + javaType);
                 }
-
+                
                 // For the LocalDate, LocalTime and LocalDateTime values, calendar should be set by now.
-                if (null == calendar) {
-                    // Create the calendar that will hold the value. For DateTimeOffset values, the calendar's
-                    // time zone is UTC. For other values, the calendar's time zone is a local time zone.
-                    calendar = new GregorianCalendar(timeZone, Locale.US);
-
-                    // Set the calendar lenient to allow setting the DAY_OF_YEAR and MILLISECOND fields
-                    // to roll other fields to their correct values.
-                    calendar.setLenient(true);
-
-                    // Clear the calendar of any existing state. The state of a new Calendar object always
-                    // reflects the current date, time, DST offset, etc.
-                    calendar.clear();
-
-                    // Load the calendar with the desired value
-                    calendar.setTimeInMillis(utcMillis);
+                if (null == zdt) {
+                    zdt = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), timeZone);
+                    
+                    // Timezone offset value changes depending on the year for instant, but this conflicts with
+                    // our current design.
+                    // Compare the ZoneId's offset from the year assigned, and re-adjust the ZonedDateTime value
+                    // to counteract the change in Timezone offset value for that specific year.
+                    int correctOffsetSeconds = TimeZone.getDefault().getOffset(Calendar.ZONE_OFFSET) / 1000;
+                    
+                    if (zdt.getOffset().getTotalSeconds() != correctOffsetSeconds) {
+                        zdt = zdt.plusSeconds(correctOffsetSeconds - zdt.getOffset().getTotalSeconds());
+                    }
                 }
-
             }
 
             // With the value now stored in a Calendar object, determine the backend data type and
@@ -740,25 +688,27 @@ final class DTV {
                 switch (typeInfo.getSSType()) {
                     case DATETIME:
                     case DATETIME2:
-                        /* Default and max fractional precision is 7 digits (100ns)
+                        /*
+                         * Default and max fractional precision is 7 digits (100ns)
                          * Send DateTime2 to DateTime columns to let the server handle nanosecond rounding. Also
                          * adjust scale accordingly to avoid rounding on driver's end.
                          */
-                        int scale = (typeInfo.getSSType() == SSType.DATETIME) ? typeInfo.getScale() + 4 : typeInfo.getScale();
+                        int scale = (typeInfo.getSSType() == SSType.DATETIME) ? typeInfo.getScale() + 4
+                                                                              : typeInfo.getScale();
                         tdsWriter.writeRPCDateTime2(name,
-                                timestampNormalizedCalendar(calendar, javaType, conn.baseYear()), subSecondNanos,
-                                scale, isOutParam);
+                                timestampNormalizedCalendar(zdt, javaType, conn.baseYear()), subSecondNanos, scale,
+                                isOutParam);
 
                         break;
 
                     case DATE:
-                        tdsWriter.writeRPCDate(name, calendar, isOutParam);
+                        tdsWriter.writeRPCDate(name, zdt, isOutParam);
 
                         break;
 
                     case TIME:
                         // Default and max fractional precision is 7 digits (100ns)
-                        tdsWriter.writeRPCTime(name, calendar, subSecondNanos, typeInfo.getScale(), isOutParam);
+                        tdsWriter.writeRPCTime(name, zdt, subSecondNanos, typeInfo.getScale(), isOutParam);
 
                         break;
 
@@ -767,20 +717,20 @@ final class DTV {
                         // deliberately interpret the "wall calendar" representation as expressing
                         // a date/time in UTC rather than the local time zone.
                         if (JavaType.DATETIMEOFFSET != javaType) {
-                            calendar = timestampNormalizedCalendar(localCalendarAsUTC(calendar), javaType,
+                            zdt = timestampNormalizedCalendar(localZDTAsUTC(zdt), javaType,
                                     conn.baseYear());
 
                             minutesOffset = 0; // UTC
                         }
 
-                        tdsWriter.writeRPCDateTimeOffset(name, calendar, minutesOffset, subSecondNanos,
+                        tdsWriter.writeRPCDateTimeOffset(name, zdt, minutesOffset, subSecondNanos,
                                 typeInfo.getScale(), isOutParam);
 
                         break;
 
                     case SMALLDATETIME:
                         tdsWriter.writeRPCDateTime(name,
-                                timestampNormalizedCalendar(calendar, javaType, conn.baseYear()), subSecondNanos,
+                                timestampNormalizedCalendar(zdt, javaType, conn.baseYear()), subSecondNanos,
                                 isOutParam);
                         break;
 
@@ -790,27 +740,27 @@ final class DTV {
                             case DATETIME:
                             case SMALLDATETIME:
                                 tdsWriter.writeEncryptedRPCDateTime(name,
-                                        timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                        timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                         subSecondNanos, isOutParam, jdbcType);
                                 break;
 
                             case TIMESTAMP:
                                 assert null != cryptoMeta;
                                 tdsWriter.writeEncryptedRPCDateTime2(name,
-                                        timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                        timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                         subSecondNanos, valueLength, isOutParam);
                                 break;
 
                             case TIME:
                                 // when colum is encrypted, always send time as time, ignore sendTimeAsDatetime setting
                                 assert null != cryptoMeta;
-                                tdsWriter.writeEncryptedRPCTime(name, calendar, subSecondNanos, valueLength,
+                                tdsWriter.writeEncryptedRPCTime(name, zdt, subSecondNanos, valueLength,
                                         isOutParam);
                                 break;
 
                             case DATE:
                                 assert null != cryptoMeta;
-                                tdsWriter.writeEncryptedRPCDate(name, calendar, isOutParam);
+                                tdsWriter.writeEncryptedRPCDate(name, zdt, isOutParam);
                                 break;
 
                             case TIMESTAMP_WITH_TIMEZONE:
@@ -820,14 +770,14 @@ final class DTV {
                                 // deliberately reinterpret the value as local to UTC. This is to match
                                 // SQL Server behavior for such conversions.
                                 if ((JavaType.DATETIMEOFFSET != javaType) && (JavaType.OFFSETDATETIME != javaType)) {
-                                    calendar = timestampNormalizedCalendar(localCalendarAsUTC(calendar), javaType,
+                                    zdt = timestampNormalizedCalendar(localZDTAsUTC(zdt), javaType,
                                             conn.baseYear());
 
                                     minutesOffset = 0; // UTC
                                 }
 
                                 assert null != cryptoMeta;
-                                tdsWriter.writeEncryptedRPCDateTimeOffset(name, calendar, minutesOffset, subSecondNanos,
+                                tdsWriter.writeEncryptedRPCDateTimeOffset(name, zdt, minutesOffset, subSecondNanos,
                                         valueLength, isOutParam);
                                 break;
 
@@ -862,20 +812,20 @@ final class DTV {
                             if (null != cryptoMeta) {
                                 if ((JDBCType.DATETIME == jdbcType) || (JDBCType.SMALLDATETIME == jdbcType)) {
                                     tdsWriter.writeEncryptedRPCDateTime(name,
-                                            timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                            timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                             subSecondNanos, isOutParam, jdbcType);
                                 } else if (0 == valueLength) {
                                     tdsWriter.writeEncryptedRPCDateTime2(name,
-                                            timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                            timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                             subSecondNanos, outScale, isOutParam);
                                 } else {
                                     tdsWriter.writeEncryptedRPCDateTime2(name,
-                                            timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                            timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                             subSecondNanos, (valueLength), isOutParam);
                                 }
                             } else
                                 tdsWriter.writeRPCDateTime2(name,
-                                        timestampNormalizedCalendar(calendar, javaType, conn.baseYear()),
+                                        timestampNormalizedCalendar(zdt, javaType, conn.baseYear()),
                                         subSecondNanos, TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
 
                             break;
@@ -884,10 +834,10 @@ final class DTV {
                             // if column is encrypted, always send as TIME
                             if (null != cryptoMeta) {
                                 if (0 == valueLength) {
-                                    tdsWriter.writeEncryptedRPCTime(name, calendar, subSecondNanos, outScale,
+                                    tdsWriter.writeEncryptedRPCTime(name, zdt, subSecondNanos, outScale,
                                             isOutParam);
                                 } else {
-                                    tdsWriter.writeEncryptedRPCTime(name, calendar, subSecondNanos, valueLength,
+                                    tdsWriter.writeEncryptedRPCTime(name, zdt, subSecondNanos, valueLength,
                                             isOutParam);
                                 }
                             } else {
@@ -895,10 +845,10 @@ final class DTV {
                                 // data type, based on sendTimeAsDatetime setting.
                                 if (conn.getSendTimeAsDatetime()) {
                                     tdsWriter.writeRPCDateTime(name,
-                                            timestampNormalizedCalendar(calendar, JavaType.TIME, TDS.BASE_YEAR_1970),
+                                            timestampNormalizedCalendar(zdt, JavaType.TIME, TDS.BASE_YEAR_1970),
                                             subSecondNanos, isOutParam);
                                 } else {
-                                    tdsWriter.writeRPCTime(name, calendar, subSecondNanos,
+                                    tdsWriter.writeRPCTime(name, zdt, subSecondNanos,
                                             TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
                                 }
                             }
@@ -907,9 +857,9 @@ final class DTV {
 
                         case DATE:
                             if (null != cryptoMeta)
-                                tdsWriter.writeEncryptedRPCDate(name, calendar, isOutParam);
+                                tdsWriter.writeEncryptedRPCDate(name, zdt, isOutParam);
                             else
-                                tdsWriter.writeRPCDate(name, calendar, isOutParam);
+                                tdsWriter.writeRPCDate(name, zdt, isOutParam);
 
                             break;
 
@@ -918,13 +868,13 @@ final class DTV {
                             // deliberately reinterpret the value as local to UTC. This is to match
                             // SQL Server behavior for such conversions.
                             if ((JavaType.OFFSETDATETIME != javaType) && (JavaType.OFFSETTIME != javaType)) {
-                                calendar = timestampNormalizedCalendar(localCalendarAsUTC(calendar), javaType,
+                                zdt = timestampNormalizedCalendar(localZDTAsUTC(zdt), javaType,
                                         conn.baseYear());
 
                                 minutesOffset = 0; // UTC
                             }
 
-                            tdsWriter.writeRPCDateTimeOffset(name, calendar, minutesOffset, subSecondNanos,
+                            tdsWriter.writeRPCDateTimeOffset(name, zdt, minutesOffset, subSecondNanos,
                                     TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
 
                             break;
@@ -936,7 +886,7 @@ final class DTV {
                             // deliberately reinterpret the value as local to UTC. This is to match
                             // SQL Server behavior for such conversions.
                             if ((JavaType.DATETIMEOFFSET != javaType) && (JavaType.OFFSETDATETIME != javaType)) {
-                                calendar = timestampNormalizedCalendar(localCalendarAsUTC(calendar), javaType,
+                                zdt = timestampNormalizedCalendar(localZDTAsUTC(zdt), javaType,
                                         conn.baseYear());
 
                                 minutesOffset = 0; // UTC
@@ -944,16 +894,16 @@ final class DTV {
 
                             if (null != cryptoMeta) {
                                 if (0 == valueLength) {
-                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, calendar, minutesOffset,
+                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, zdt, minutesOffset,
                                             subSecondNanos, outScale, isOutParam);
                                 } else {
-                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, calendar, minutesOffset,
+                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, zdt, minutesOffset,
                                             subSecondNanos,
                                             (0 == valueLength ? TDS.MAX_FRACTIONAL_SECONDS_SCALE : valueLength),
                                             isOutParam);
                                 }
                             } else
-                                tdsWriter.writeRPCDateTimeOffset(name, calendar, minutesOffset, subSecondNanos,
+                                tdsWriter.writeRPCDateTimeOffset(name, zdt, minutesOffset, subSecondNanos,
                                         TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
 
                             break;
@@ -977,7 +927,7 @@ final class DTV {
                             || JDBCType.TIMESTAMP == jdbcType : "Unexpected JDBCType: " + jdbcType;
 
                     tdsWriter.writeRPCDateTime(name,
-                            timestampNormalizedCalendar(calendar, javaType, TDS.BASE_YEAR_1970), subSecondNanos,
+                            timestampNormalizedCalendar(zdt, javaType, TDS.BASE_YEAR_1970), subSecondNanos,
                             isOutParam);
                 }
             } // setters
@@ -991,16 +941,15 @@ final class DTV {
          * January of the specified base year (1970 or 1900) For other temporal types (DATETIME, SMALLDATETIME,
          * DATETIME2, DATETIMEOFFSET), no normalization is needed - both date and time contribute to the final value.
          *
-         * @param calendar
+         * @param zdt
          *        the value to normalize. May be null.
          * @param javaType
          *        the Java type that the calendar value represents.
          * @param baseYear
          *        the base year (1970 or 1900) for use in normalizing TIME values.
          */
-        private GregorianCalendar timestampNormalizedCalendar(GregorianCalendar calendar, JavaType javaType,
-                int baseYear) {
-            if (null != calendar) {
+        private ZonedDateTime timestampNormalizedCalendar(ZonedDateTime zdt, JavaType javaType, int baseYear) {
+            if (null != zdt) {
                 switch (javaType) {
                     case LOCALDATE:
                     case DATE:
@@ -1009,17 +958,16 @@ final class DTV {
                         // This is because java.util.Date is mapped to JDBC TIMESTAMP according to the JDBC spec.
                         // java.util.Calendar is also mapped to JDBC TIMESTAMP and hence should have both date and time
                         // parts.
-                        calendar.set(Calendar.HOUR_OF_DAY, 0);
-                        calendar.set(Calendar.MINUTE, 0);
-                        calendar.set(Calendar.SECOND, 0);
-                        calendar.set(Calendar.MILLISECOND, 0);
+                        zdt = ZonedDateTime.of(zdt.getYear(), zdt.getMonth().getValue(), zdt.getDayOfMonth(), 0, 0, 0,
+                                0, zdt.getZone());
                         break;
 
                     case OFFSETTIME:
                     case LOCALTIME:
                     case TIME:
                         assert TDS.BASE_YEAR_1970 == baseYear || TDS.BASE_YEAR_1900 == baseYear;
-                        calendar.set(baseYear, Calendar.JANUARY, 1);
+                        zdt = ZonedDateTime.of(baseYear, 1, 1, zdt.getHour(), zdt.getMinute(), zdt.getSecond(),
+                                zdt.getNano(), zdt.getZone());
                         break;
 
                     default:
@@ -1027,32 +975,30 @@ final class DTV {
                 }
             }
 
-            return calendar;
+            return zdt;
         }
-
+        
         // Conversion from Date/Time/Timestamp to DATETIMEOFFSET reinterprets (changes)
         // the "wall clock" value to be local to UTC rather than the local to the
         // local Calendar's time zone. This behavior (ignoring the local time zone
         // when converting to DATETIMEOFFSET, which is time zone-aware) may seem
         // counterintuitive, but is necessary per the data types spec to match SQL
         // Server's conversion behavior for both setters and updaters.
-        private GregorianCalendar localCalendarAsUTC(GregorianCalendar cal) {
-            if (null == cal)
+        private ZonedDateTime localZDTAsUTC(ZonedDateTime zdt) {
+            if (null == zdt)
                 return null;
 
             // Interpret "wall clock" value of the local calendar as a date/time/timestamp in UTC
-            int year = cal.get(Calendar.YEAR);
-            int month = cal.get(Calendar.MONTH);
-            int date = cal.get(Calendar.DATE);
-            int hour = cal.get(Calendar.HOUR_OF_DAY);
-            int minute = cal.get(Calendar.MINUTE);
-            int second = cal.get(Calendar.SECOND);
-            int millis = cal.get(Calendar.MILLISECOND);
+            int year = zdt.getYear();
+            int month = zdt.getMonthValue();
+            int date = zdt.getDayOfMonth();
+            int hour = zdt.getHour();
+            int minute = zdt.getMinute();
+            int second = zdt.getSecond();
+            int nanos = zdt.getNano();
 
-            cal.setTimeZone(UTC.timeZone);
-            cal.set(year, month, date, hour, minute, second);
-            cal.set(Calendar.MILLISECOND, millis);
-            return cal;
+            zdt = ZonedDateTime.of(year, month, date, hour, minute, second, nanos, UTC.timeZone);
+            return zdt;
         }
 
         void execute(DTV dtv, Float floatValue) throws SQLServerException {
@@ -1423,6 +1369,7 @@ final class DTV {
 
         /*
          * (non-Javadoc)
+         * 
          * @see com.microsoft.sqlserver.jdbc.DTVExecuteOp#execute(com.microsoft.sqlserver.jdbc.DTV,
          * microsoft.sql.SqlVariant)
          */
@@ -1699,11 +1646,11 @@ final class DTV {
                 case DATETIMEOFFSET:
                     op.execute(this, (microsoft.sql.DateTimeOffset) value);
                     break;
-                    
+
                 case GEOMETRY:
                     op.execute(this, ((Geometry) value).serialize());
                     break;
-                    
+
                 case GEOGRAPHY:
                     op.execute(this, ((Geography) value).serialize());
                     break;
@@ -2255,6 +2202,7 @@ final class AppDTVImpl extends DTVImpl {
 
         /*
          * (non-Javadoc)
+         * 
          * @see com.microsoft.sqlserver.jdbc.DTVExecuteOp#execute(com.microsoft.sqlserver.jdbc.DTV,
          * microsoft.sql.SqlVariant)
          */
@@ -2340,6 +2288,7 @@ final class AppDTVImpl extends DTVImpl {
 
     /*
      * (non-Javadoc)
+     * 
      * @see com.microsoft.sqlserver.jdbc.DTVImpl#getInternalVariant()
      */
     @Override

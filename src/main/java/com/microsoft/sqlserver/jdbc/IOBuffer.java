@@ -461,10 +461,12 @@ final class TDS {
 
 class Nanos {
     static final int PER_SECOND = 1000000000;
+    static final long PER_HOUR = 60 * 60 * (long) PER_SECOND;
+    static final long PER_MINUTE = 60 * (long) PER_SECOND;
     static final int PER_MAX_SCALE_INTERVAL = PER_SECOND / (int) Math.pow(10, TDS.MAX_FRACTIONAL_SECONDS_SCALE);
     static final int PER_MILLISECOND = PER_SECOND / 1000;
     static final long PER_DAY = 24 * 60 * 60 * (long) PER_SECOND;
-
+    
     private Nanos() {}
 }
 

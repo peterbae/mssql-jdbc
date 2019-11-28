@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.Locale;
@@ -784,7 +785,7 @@ final class DDC {
             timeZoneCalendar.setLenient(true);
             timeZoneCalendar.clear();
         }
-        
+
         // when casting LocalDateTime to java.sql.Time, the date part gets set to 1970-01-01.
         // However, this value might need to be adjusted based on the combination of the time value
         // plus or minus the offset value from UTC when the source data type is DateTimeOffset.
@@ -890,38 +891,46 @@ final class DDC {
                 // } else {
                 ldt = LocalDateTime.of(1, 1, 1, 0, 0, 0);
                 ldt = ldt.plusDays(daysSinceBaseDate);
-                if (jdbcType.category != JDBCType.Category.DATE && ssType != SSType.DATE) {
+                if (ssType != SSType.DATE && jdbcType.category != JDBCType.Category.DATE) {
                     ldt = ldt.plusNanos(ticksSinceMidnight);
                 }
 
                 if (SSType.DATETIMEOFFSET == ssType) {
                     Calendar cal = Calendar.getInstance(TimeZone.getDefault());
-                    
-                    if (jdbcType.category == JDBCType.Category.TIME) {
-                        Calendar localCal = Calendar.getInstance(TimeZone.getDefault());
-                        localCal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
-                        int minOffsetFromCal = (localCal.get(Calendar.ZONE_OFFSET) + localCal.get(Calendar.DST_OFFSET))
-                                / (1000 * 60);
-                        long ldtNanosTime = (ldt.getHour() * Nanos.PER_HOUR)
-                                + (ldt.getMinute() * Nanos.PER_MINUTE)
-                                + (ldt.getSecond() * Nanos.PER_SECOND)
-                                + ldt.getNano();
-                        long totalDTOOffsetNanos = ldtNanosTime + (minOffsetFromCal * 60 * Nanos.PER_SECOND);
-                        long nanosInADay = 86400000000000L;
-                        if (totalDTOOffsetNanos > nanosInADay) {
-                            dtoToTimeDateCorrection = 86400000; // plus 1 day in milliseconds
-                        } else if (0 > totalDTOOffsetNanos) {
+
+                    if (jdbcType.category == JDBCType.Category.DATE) {
+                        ldt = ldt.plusNanos(ticksSinceMidnight);
+                        ldt = ldt.plus(localMillisOffset, ChronoUnit.MILLIS);
+                        ldt = LocalDateTime.of(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), 0, 0, 0);
+                        cal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
+                    } else if (jdbcType.category == JDBCType.Category.TIME) {
+                        long ticksSinceMidnightTime = ticksSinceMidnight;
+                        if ((ticksSinceMidnight % Nanos.PER_SECOND) % Nanos.PER_MILLISECOND >= Nanos.PER_MILLISECOND
+                                / 2) {
+                            ticksSinceMidnightTime = ticksSinceMidnightTime + 1000000;
+                        }
+
+                        long offsetFromCalNanos = (long) (Util.defaultEpochCalendar.get(Calendar.ZONE_OFFSET)
+                                + ((long) Util.defaultEpochCalendar.get(Calendar.DST_OFFSET))) * Nanos.PER_MILLISECOND;
+                        long localMillisOffsetNanos = (long) localMillisOffset * Nanos.PER_MILLISECOND;
+                        long originalTimeNanos = ticksSinceMidnightTime + localMillisOffsetNanos;
+                        if (originalTimeNanos < 0) {
+                            originalTimeNanos = originalTimeNanos + Nanos.PER_DAY;
+                        } else if (originalTimeNanos >= Nanos.PER_DAY) {
+                            originalTimeNanos = originalTimeNanos % Nanos.PER_DAY;
+                        }
+
+                        long totalDTOOffsetNanos = originalTimeNanos + offsetFromCalNanos - localMillisOffsetNanos;
+
+                        if (totalDTOOffsetNanos < 0) {
                             dtoToTimeDateCorrection = -86400000; // minus 1 day in milliseconds
+                        } else if (totalDTOOffsetNanos >= Nanos.PER_DAY) {
+                            dtoToTimeDateCorrection = 86400000; // plus 1 day in milliseconds
                         }
                     } else {
                         cal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
                     }
-                    
-                    if (jdbcType.category != JDBCType.Category.TIME) {
-                        cal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
-                    }
-                    
-                    
+
                     if (jdbcType.category == JDBCType.Category.CHARACTER) {
                         int minOffsetFromCal = timeZoneCalendar.get(Calendar.ZONE_OFFSET) / (1000 * 60);
                         ldt = ldt.plusMinutes(minOffsetFromCal);
@@ -968,10 +977,6 @@ final class DDC {
                 // ldt = ldt.minusMinutes(localTimeZoneOffset / 60 / 1000);
                 // System.out.println("swag");
                 // }
-
-                if (SSType.DATETIMEOFFSET == ssType) {
-
-                }
 
                 // if (SSType.DATETIMEOFFSET == ssType && !componentTimeZone.hasSameRules(localTimeZone)) {
                 // GregorianCalendar localCalendar = new GregorianCalendar(localTimeZone, Locale.US);
@@ -1128,14 +1133,10 @@ final class DDC {
                 // ldt = ldt.minusMinutes(minOffsetFromCal);
 
                 if (SSType.DATETIMEOFFSET == ssType) {
-                    ldt = ldt.plusNanos(ticksSinceMidnight);
-                    ldt = LocalDateTime.of(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), 0, 0, 0);
-                    Calendar cal = Calendar.getInstance(TimeZone.getDefault());
-                    cal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
-                    int minOffsetFromCal = (cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET)) / (1000 * 60);
-                    ldt = ldt.plusMinutes(minOffsetFromCal);
-                    // Calendar cal = Calendar.getInstance(TimeZone.getDefault());
+                    // ldt = ldt.plusNanos(ticksSinceMidnight);
                     // ldt = LocalDateTime.of(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), 0, 0, 0);
+                    // Calendar cal = Calendar.getInstance(TimeZone.getDefault());
+                    // cal.setTimeInMillis(Timestamp.valueOf(ldt).getTime());
                     // int minOffsetFromCal = (cal.get(Calendar.ZONE_OFFSET) + cal.get(Calendar.DST_OFFSET)) / (1000 *
                     // 60);
                     // ldt = ldt.plusMinutes(minOffsetFromCal);

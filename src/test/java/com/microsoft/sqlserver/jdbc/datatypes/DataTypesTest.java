@@ -1013,8 +1013,8 @@ public class DataTypesTest extends AbstractTest {
 
         SOMETIME(new TimeValue("11:58:31.456789", 6)),
 
-        THE_LAST_MILLISECOND_WITH_TIME_ZONE(new DateTimeOffsetValue("9999-12-31 23:59:59.9999999 +14:00")),
-
+        THE_LAST_MILLISECOND_WITH_TIME_ZONE(new DateTimeOffsetValue("9999-12-30 23:59:59.9999999 +14:00")),
+        
         COMMON_ERA_FIRST_DAY(new DateValue("0001-01-01")),
 
         PRE_CUTOVER(new DateValue("1582-10-04")),
@@ -1053,6 +1053,7 @@ public class DataTypesTest extends AbstractTest {
         final SQLValue sqlValue;
 
         TestValue(SQLValue sqlValue) {
+            TimeZone.setDefault(TimeZone.getTimeZone("Japan"));
             this.sqlValue = sqlValue;
         }
     };

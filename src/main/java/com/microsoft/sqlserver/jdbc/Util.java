@@ -11,10 +11,12 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.text.DecimalFormat;
 import java.text.MessageFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -31,6 +33,13 @@ final class Util {
     final static String WSIDNotAvailable = ""; // default string when WSID is not available
 
     final static String ACTIVITY_ID_TRACE_PROPERTY = "com.microsoft.sqlserver.jdbc.traceactivity";
+    final static Calendar defaultEpochCalendar = Calendar.getInstance(TimeZone.getDefault());
+    
+    static {
+        defaultEpochCalendar.set(Calendar.YEAR, 1970);
+        defaultEpochCalendar.set(Calendar.MONTH, Calendar.JANUARY);
+        defaultEpochCalendar.set(Calendar.DAY_OF_MONTH, 1);
+    }
 
     // The JRE is identified by the string below so that the driver can make
     // any vendor or version specific decisions

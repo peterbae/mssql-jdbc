@@ -5713,22 +5713,26 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
         }
 
         // Return false if the connection is closed
-        if (isSessionUnAvailable())
+        if (isSessionUnAvailable()) {
             return false;
+        }
 
         boolean isValid = true;
+        int originalNetworkTimeout = getNetworkTimeout();
+
         try (SQLServerStatement stmt = new SQLServerStatement(this, ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY, SQLServerStatementColumnEncryptionSetting.UseConnectionSetting)) {
 
             // If asked, limit the time to wait for the query to complete.
-            if (0 != timeout)
+            if (0 != timeout) {
                 stmt.setQueryTimeout(timeout);
+            }
 
-            /*
-             * Try to execute the query. If this succeeds, then the connection is valid. If it fails (throws an
-             * exception), then the connection is not valid. If a timeout was provided, execution throws an
-             * "query timed out" exception if the query fails to execute in that time.
-             */
+            setNetworkTimeout(null, timeout * 1000);
+            // Try to execute the query. If this succeeds, then the connection is valid.
+            // If it fails (throws an exception), then the connection is not valid.
+            // If a timeout was provided, execution throws an "query timed out" exception
+            // if the query fails to execute in that time.
             stmt.executeQueryInternal("SELECT 1");
         } catch (SQLException e) {
             isValid = false;
@@ -5737,6 +5741,8 @@ public class SQLServerConnection implements ISQLServerConnection, java.io.Serial
              * be invalid if the statement fails to close, even though query execution succeeded.
              */
             connectionlogger.fine(toString() + " Exception checking connection validity: " + e.getMessage());
+        } finally {
+            setNetworkTimeout(null, originalNetworkTimeout);
         }
 
         loggerExternal.exiting(getClassNameLogging(), "isValid", isValid);

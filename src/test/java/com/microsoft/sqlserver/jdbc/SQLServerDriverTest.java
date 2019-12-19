@@ -15,7 +15,6 @@ import java.sql.Statement;
 import java.util.Enumeration;
 import java.util.Properties;
 import java.util.logging.Logger;
-import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.platform.runner.JUnitPlatform;
@@ -59,9 +58,12 @@ public class SQLServerDriverTest extends AbstractTest {
             current = drivers.nextElement();
             DriverManager.deregisterDriver(current);
         }
-        Stream<Driver> currentDrivers = DriverManager.drivers();
-        Object[] driversArray = currentDrivers.toArray();
-        assertEquals(0, driversArray.length);
+        Enumeration<Driver> currentDrivers = DriverManager.getDrivers();
+        int count = 0;
+        while (currentDrivers.hasMoreElements()) {
+            count++;
+        }
+        assertEquals(0, count);
         DriverManager.registerDriver(current);
     }
 

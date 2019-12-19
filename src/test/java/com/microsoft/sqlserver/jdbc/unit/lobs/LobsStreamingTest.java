@@ -145,7 +145,7 @@ public class LobsStreamingTest extends AbstractTest {
                         Clob c = rs.getClob(2);
                         assertEquals(c.length(), lob_data.get(index).length());
                         try (InputStream is = c.getAsciiStream();
-                                Scanner s = new Scanner(is, java.nio.charset.StandardCharsets.US_ASCII)
+                                Scanner s = new Scanner(is, java.nio.charset.StandardCharsets.US_ASCII.displayName())
                                         .useDelimiter("\\A")) {
                             String received = getStringFromInputStream(is, s);// streaming string
                             assertEquals(lob_data.get(index), received);// compare streamed string to initial string
@@ -187,7 +187,7 @@ public class LobsStreamingTest extends AbstractTest {
                         NClob c = rs.getNClob(2);
                         assertEquals(c.length(), lob_data.get(index).length());
                         try (InputStream is = c.getAsciiStream();
-                                Scanner s = new Scanner(is, java.nio.charset.StandardCharsets.US_ASCII)
+                                Scanner s = new Scanner(is, java.nio.charset.StandardCharsets.US_ASCII.displayName())
                                         .useDelimiter("\\A")) {
                             String received = getStringFromInputStream(is, s);// NClob AsciiStream is never streamed
                             c.free();

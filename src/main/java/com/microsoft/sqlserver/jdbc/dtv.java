@@ -30,6 +30,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.EnumMap;
 import java.util.GregorianCalendar;
@@ -271,6 +272,7 @@ final class DTV {
         private final boolean isOutParam;
         private final TDSWriter tdsWriter;
         private final SQLServerConnection conn;
+        private final Calendar epochCalendar = new GregorianCalendar(TimeZone.getDefault(), Locale.US);
 
         SendByRPCOp(String name, TypeInfo typeInfo, SQLCollation collation, int precision, int outScale,
                 boolean isOutParam, TDSWriter tdsWriter, SQLServerConnection conn) {
@@ -429,6 +431,11 @@ final class DTV {
             GregorianCalendar calendar = null;
             int subSecondNanos = 0;
             int minutesOffset = 0;
+
+            if (null == dtv.getCalendar() && javaType != JavaType.CALENDAR) {
+                sendTemporalWithLocalDateTime(dtv, javaType, value);
+                return;
+            }
 
             /*
              * Some precisions to consider: java.sql.Time is millisecond precision java.sql.Timestamp is nanosecond
@@ -983,6 +990,461 @@ final class DTV {
             } // setters
         }
 
+        private void sendTemporalWithLocalDateTime(DTV dtv, JavaType javaType, Object value) throws SQLServerException {
+            JDBCType jdbcType = dtv.getJdbcType();
+            LocalDateTime ldt = null;
+            int subSecondNanos = 0;
+            int minutesOffset = 0;
+
+            if (null != value) {
+                long utcMillis = 0; // Value to which the calendar is to be set (in milliseconds 1/1/1970 00:00:00 GMT)
+
+                // Figure out the value components according to the type of the Java object passed in...
+                switch (javaType) {
+                    case TIME: {
+                        utcMillis = ((java.sql.Time) value).getTime();
+                        subSecondNanos = Nanos.PER_MILLISECOND * (int) (utcMillis % 1000);
+                        ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0, 0);
+                        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
+                        // The utcMillis value may be negative for morning times in time zones east of GMT.
+                        // Since the date part of the java.sql.Time object is normalized to 1/1/1970
+                        // in the local time zone, the date may still be 12/31/1969 UTC.
+                        //
+                        // If that is the case then adjust the sub-second nanos to the correct non-negative
+                        // "wall clock" value. For example: -1 nanos (one nanosecond before midnight) becomes
+                        // 999999999 nanos (999,999,999 nanoseconds after 11:59:59).
+                        if (subSecondNanos < 0)
+                            subSecondNanos += Nanos.PER_SECOND;
+
+                        break;
+                    }
+
+                    case DATE: {
+                        ldt = LocalDateTime.of(((java.sql.Date) value).getYear() + TDS.BASE_YEAR_1900,
+                                ((java.sql.Date) value).getMonth() + 1, ((java.sql.Date) value).getDate(), 0, 0);
+                        break;
+                    }
+
+                    case TIMESTAMP: {
+                        // Set the time zone from the calendar supplied by the app or use the JVM default
+                        java.sql.Timestamp ts = (java.sql.Timestamp) value;
+
+                        ldt = parseTimestampIntoLocalDateTime(ldt, ts.toString()).plusNanos(ts.getNanos());
+                        subSecondNanos = ts.getNanos();
+                        break;
+                    }
+
+                    case UTILDATE: {
+                        ldt = LocalDateTime.of(((java.util.Date) value).getYear() + TDS.BASE_YEAR_1900,
+                                ((java.util.Date) value).getMonth() + 1, ((java.util.Date) value).getDate(),
+                                ((java.util.Date) value).getHours(), ((java.util.Date) value).getMinutes(),
+                                ((java.util.Date) value).getSeconds());
+
+                        utcMillis = ((java.util.Date) value).getTime();
+
+                        // Need to use the subsecondnanoes part in UTILDATE besause it is mapped to JDBC TIMESTAMP. This
+                        // is not
+                        // needed in DATE because DATE is mapped to JDBC DATE (with time part normalized to midnight)
+                        subSecondNanos = Nanos.PER_MILLISECOND * (int) (utcMillis % 1000);
+
+                        // The utcMillis value may be negative for morning times in time zones east of GMT.
+                        // Since the date part of the java.sql.Time object is normalized to 1/1/1970
+                        // in the local time zone, the date may still be 12/31/1969 UTC.
+                        //
+                        // If that is the case then adjust the sub-second nanos to the correct non-negative
+                        // "wall clock" value. For example: -1 nanos (one nanosecond before midnight) becomes
+                        // 999999999 nanos (999,999,999 nanoseconds after 11:59:59).
+                        if (subSecondNanos < 0)
+                            subSecondNanos += Nanos.PER_SECOND;
+                        ldt = ldt.plusNanos(subSecondNanos);
+                        break;
+                    }
+
+                    case CALENDAR: {
+                        utcMillis = ((java.util.Calendar) value).getTimeInMillis();
+
+                        ldt = LocalDateTime.of(((java.util.Calendar) value).get(Calendar.YEAR),
+                                ((java.util.Calendar) value).get(Calendar.MONTH) + 1,
+                                ((java.util.Calendar) value).get(Calendar.DAY_OF_MONTH),
+                                ((java.util.Calendar) value).get(Calendar.HOUR_OF_DAY),
+                                ((java.util.Calendar) value).get(Calendar.MINUTE),
+                                ((java.util.Calendar) value).get(Calendar.SECOND));
+
+                        // Need to use the subsecondnanoes part in CALENDAR besause it is mapped to JDBC TIMESTAMP. This
+                        // is not
+                        // needed in DATE because DATE is mapped to JDBC DATE (with time part normalized to midnight)
+                        subSecondNanos = Nanos.PER_MILLISECOND * (int) (utcMillis % 1000);
+
+                        // The utcMillis value may be negative for morning times in time zones east of GMT.
+                        // Since the date part of the java.sql.Time object is normalized to 1/1/1970
+                        // in the local time zone, the date may still be 12/31/1969 UTC.
+                        //
+                        // If that is the case then adjust the sub-second nanos to the correct non-negative
+                        // "wall clock" value. For example: -1 nanos (one nanosecond before midnight) becomes
+                        // 999999999 nanos (999,999,999 nanoseconds after 11:59:59).
+                        if (subSecondNanos < 0)
+                            subSecondNanos += Nanos.PER_SECOND;
+                        ldt = ldt.plusNanos(subSecondNanos);
+                        break;
+                    }
+
+                    case LOCALDATE:
+                        // Mapped to JDBC type DATE
+                        // All time fields are set to default
+                        ldt = ((LocalDate) value).atStartOfDay();
+                        break;
+
+                    case LOCALTIME:
+                        // Nanoseconds precision, mapped to JDBC type TIME
+                        // All date fields are set to default
+                        LocalTime LocalTimeValue = ((LocalTime) value);
+                        ldt = LocalDateTime.of(LocalDate.of(conn.baseYear(), 1, 1), LocalTimeValue);
+                        subSecondNanos = LocalTimeValue.getNano();
+
+                        // Do not need to adjust subSecondNanos as in the case for TIME
+                        // because LOCALTIME does not have time zone and is not using utcMillis
+                        break;
+
+                    case LOCALDATETIME:
+                        // Nanoseconds precision, mapped to JDBC type TIMESTAMP
+                        ldt = (LocalDateTime) value;
+
+                        subSecondNanos = ldt.getNano();
+
+                        // Do not need to adjust subSecondNanos as in the case for TIME
+                        // because LOCALDATETIME does not have time zone and is not using utcMillis
+                        break;
+
+                    case OFFSETTIME:
+                        OffsetTime offsetTimeValue = (OffsetTime) value;
+                        try {
+                            // offsetTimeValue.getOffset() returns a ZoneOffset object which has only hours and minutes
+                            // components. So the result of the division will be an integer always. SQL Server also
+                            // supports
+                            // offsets in minutes precision.
+                            minutesOffset = offsetTimeValue.getOffset().getTotalSeconds() / 60;
+                        } catch (Exception e) {
+                            throw new SQLServerException(SQLServerException.getErrString("R_zoneOffsetError"), null, // SQLState
+                                                                                                                     // is
+                                                                                                                     // null
+                                                                                                                     // as
+                                                                                                                     // this
+                                                                                                                     // error
+                                                                                                                     // is
+                                                                                                                     // generated
+                                                                                                                     // in
+                                                                                                                     // the
+                                                                                                                     // driver
+                                    0, // Use 0 instead of DriverError.NOT_SET to use the correct constructor
+                                    e);
+                        }
+                        subSecondNanos = offsetTimeValue.getNano();
+                        ldt = LocalDateTime.of(LocalDate.of(conn.baseYear(), 1, 1), offsetTimeValue.toLocalTime());
+                        break;
+
+                    case OFFSETDATETIME:
+                        OffsetDateTime offsetDateTimeValue = (OffsetDateTime) value;
+                        try {
+                            // offsetTimeValue.getOffset() returns a ZoneOffset object which has only hours and minutes
+                            // components. So the result of the division will be an integer always. SQL Server also
+                            // supports
+                            // offsets in minutes precision.
+                            minutesOffset = offsetDateTimeValue.getOffset().getTotalSeconds() / 60;
+                        } catch (Exception e) {
+                            throw new SQLServerException(SQLServerException.getErrString("R_zoneOffsetError"), null, // SQLState
+                                                                                                                     // is
+                                                                                                                     // null
+                                                                                                                     // as
+                                                                                                                     // this
+                                                                                                                     // error
+                                                                                                                     // is
+                                                                                                                     // generated
+                                                                                                                     // in
+                                                                                                                     // the
+                                                                                                                     // driver
+                                    0, // Use 0 instead of DriverError.NOT_SET to use the correct constructor
+                                    e);
+                        }
+
+                        ldt = offsetDateTimeValue.toLocalDateTime();
+                        subSecondNanos = offsetDateTimeValue.getNano();
+
+//                        utcMillis = offsetDateTimeValue.toEpochSecond() * 1000;
+                        break;
+
+                    case DATETIMEOFFSET: {
+                        microsoft.sql.DateTimeOffset dtoValue = (microsoft.sql.DateTimeOffset) value;
+                        java.sql.Timestamp ts = dtoValue.getTimestamp();
+                        ldt = parseTimestampIntoLocalDateTime(ldt, dtoValue.toString()).plusNanos(ts.getNanos());
+                        subSecondNanos = dtoValue.getTimestamp().getNanos();
+                        minutesOffset = dtoValue.getMinutesOffset();
+                        ldt = ldt.minusMinutes(minutesOffset);
+
+                        // microsoft.sql.DateTimeOffset values have a time zone offset that is internal
+                        // to the value, so there should not be any DTV calendar for DateTimeOffset values.
+                        assert null == dtv.getCalendar();
+                        break;
+                    }
+
+                    default:
+                        throw new AssertionError("Unexpected JavaType: " + javaType);
+                }
+            }
+
+            if (null != typeInfo) // updater
+            {
+                switch (typeInfo.getSSType()) {
+                    case DATETIME:
+                    case DATETIME2:
+                        /*
+                         * Default and max fractional precision is 7 digits (100ns)
+                         * Send DateTime2 to DateTime columns to let the server handle nanosecond rounding. Also
+                         * adjust scale accordingly to avoid rounding on driver's end.
+                         */
+                        int scale = (typeInfo.getSSType() == SSType.DATETIME) ? typeInfo.getScale() + 4
+                                                                              : typeInfo.getScale();
+                        tdsWriter.writeRPCDateTime2(name,
+                                timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()), subSecondNanos, scale,
+                                isOutParam);
+
+                        break;
+
+                    case DATE:
+                        tdsWriter.writeRPCDate(name, ldt, isOutParam);
+
+                        break;
+
+                    case TIME:
+                        // Default and max fractional precision is 7 digits (100ns)
+                        tdsWriter.writeRPCTime(name, ldt, subSecondNanos, typeInfo.getScale(), isOutParam);
+
+                        break;
+
+                    case DATETIMEOFFSET:
+                        // When converting from any other temporal Java type to DATETIMEOFFSET,
+                        // deliberately interpret the "wall calendar" representation as expressing
+                        // a date/time in UTC rather than the local time zone.
+                        if (JavaType.DATETIMEOFFSET != javaType) {
+                            ldt = timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear());
+
+                            minutesOffset = 0; // UTC
+                        }
+
+                        tdsWriter.writeRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos, typeInfo.getScale(),
+                                isOutParam);
+
+                        break;
+
+                    case SMALLDATETIME:
+                        tdsWriter.writeRPCDateTime(name,
+                                timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()), subSecondNanos,
+                                isOutParam);
+                        break;
+
+                    case VARBINARY:
+                    case VARBINARYMAX:
+                        switch (jdbcType) {
+                            case DATETIME:
+                            case SMALLDATETIME:
+                                tdsWriter.writeEncryptedRPCDateTime(name,
+                                        timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                        subSecondNanos, isOutParam, jdbcType);
+                                break;
+
+                            case TIMESTAMP:
+                                assert null != cryptoMeta;
+                                tdsWriter.writeEncryptedRPCDateTime2(name,
+                                        timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                        subSecondNanos, valueLength, isOutParam);
+                                break;
+
+                            case TIME:
+                                // when colum is encrypted, always send time as time, ignore sendTimeAsDatetime setting
+                                assert null != cryptoMeta;
+                                tdsWriter.writeEncryptedRPCTime(name, ldt, subSecondNanos, valueLength, isOutParam);
+                                break;
+
+                            case DATE:
+                                assert null != cryptoMeta;
+                                tdsWriter.writeEncryptedRPCDate(name, ldt, isOutParam);
+                                break;
+
+                            case TIMESTAMP_WITH_TIMEZONE:
+                            case DATETIMEOFFSET:
+                                // When converting from any other temporal Java type to
+                                // DATETIMEOFFSET/TIMESTAMP_WITH_TIMEZONE,
+                                // deliberately reinterpret the value as local to UTC. This is to match
+                                // SQL Server behavior for such conversions.
+                                if ((JavaType.DATETIMEOFFSET != javaType) && (JavaType.OFFSETDATETIME != javaType)) {
+                                    ldt = timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear());
+
+                                    minutesOffset = 0; // UTC
+                                }
+
+                                assert null != cryptoMeta;
+                                tdsWriter.writeEncryptedRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos,
+                                        valueLength, isOutParam);
+                                break;
+
+                            default:
+                                assert false : "Unexpected JDBCType: " + jdbcType;
+                        }
+                        break;
+
+                    default:
+                        assert false : "Unexpected SSType: " + typeInfo.getSSType();
+                }
+            } else // setter
+            {
+                // Katmai and later
+                // ----------------
+                //
+                // When sending as...
+                // - java.sql.Types.TIMESTAMP, use DATETIME2 SQL Server data type
+                // - java.sql.Types.TIME, use TIME or DATETIME SQL Server data type
+                // as determined by sendTimeAsDatetime setting
+                // - java.sql.Types.DATE, use DATE SQL Server data type
+                // - microsoft.sql.Types.DATETIMEOFFSET, use DATETIMEOFFSET SQL Server data type
+                if (conn.isKatmaiOrLater()) {
+                    if (aeLogger.isLoggable(java.util.logging.Level.FINE) && (null != cryptoMeta)) {
+                        aeLogger.fine("Encrypting temporal data type.");
+                    }
+
+                    switch (jdbcType) {
+                        case DATETIME:
+                        case SMALLDATETIME:
+                        case TIMESTAMP:
+                            if (null != cryptoMeta) {
+                                if ((JDBCType.DATETIME == jdbcType) || (JDBCType.SMALLDATETIME == jdbcType)) {
+                                    tdsWriter.writeEncryptedRPCDateTime(name,
+                                            timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                            subSecondNanos, isOutParam, jdbcType);
+                                } else if (0 == valueLength) {
+                                    tdsWriter.writeEncryptedRPCDateTime2(name,
+                                            timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                            subSecondNanos, outScale, isOutParam);
+                                } else {
+                                    tdsWriter.writeEncryptedRPCDateTime2(name,
+                                            timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                            subSecondNanos, (valueLength), isOutParam);
+                                }
+                            } else
+                                tdsWriter.writeRPCDateTime2(name,
+                                        timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear()),
+                                        subSecondNanos, TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
+
+                            break;
+
+                        case TIME:
+                            // if column is encrypted, always send as TIME
+                            if (null != cryptoMeta) {
+                                if (0 == valueLength) {
+                                    tdsWriter.writeEncryptedRPCTime(name, ldt, subSecondNanos, outScale, isOutParam);
+                                } else {
+                                    tdsWriter.writeEncryptedRPCTime(name, ldt, subSecondNanos, valueLength, isOutParam);
+                                }
+                            } else {
+                                // Send the java.sql.Types.TIME value as TIME or DATETIME SQL Server
+                                // data type, based on sendTimeAsDatetime setting.
+                                if (conn.getSendTimeAsDatetime()) {
+                                    tdsWriter.writeRPCDateTime(name,
+                                            timestampNormalizedLocalDateTime(ldt, JavaType.TIME, TDS.BASE_YEAR_1970),
+                                            subSecondNanos, isOutParam);
+                                } else {
+                                    tdsWriter.writeRPCTime(name, ldt, subSecondNanos, TDS.MAX_FRACTIONAL_SECONDS_SCALE,
+                                            isOutParam);
+                                }
+                            }
+
+                            break;
+
+                        case DATE:
+                            if (null != cryptoMeta)
+                                tdsWriter.writeEncryptedRPCDate(name, ldt, isOutParam);
+                            else
+                                tdsWriter.writeRPCDate(name, ldt, isOutParam);
+
+                            break;
+
+                        case TIME_WITH_TIMEZONE:
+                            // When converting from any other temporal Java type to TIME_WITH_TIMEZONE,
+                            // deliberately reinterpret the value as local to UTC. This is to match
+                            // SQL Server behavior for such conversions.
+                            if ((JavaType.OFFSETDATETIME != javaType) && (JavaType.OFFSETTIME != javaType)) {
+                                ldt = timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear());
+
+                                minutesOffset = 0; // UTC
+                            }
+
+                            tdsWriter.writeRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos,
+                                    TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
+
+                            break;
+
+                        case TIMESTAMP_WITH_TIMEZONE:
+                        case DATETIMEOFFSET:
+                            // When converting from any other temporal Java type to
+                            // DATETIMEOFFSET/TIMESTAMP_WITH_TIMEZONE,
+                            // deliberately reinterpret the value as local to UTC. This is to match
+                            // SQL Server behavior for such conversions.
+                            if ((JavaType.DATETIMEOFFSET != javaType) && (JavaType.OFFSETDATETIME != javaType)) {
+                                ldt = timestampNormalizedLocalDateTime(ldt, javaType, conn.baseYear());
+
+                                minutesOffset = 0; // UTC
+                            }
+
+                            if (null != cryptoMeta) {
+                                if (0 == valueLength) {
+                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos,
+                                            outScale, isOutParam);
+                                } else {
+                                    tdsWriter.writeEncryptedRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos,
+                                            (0 == valueLength ? TDS.MAX_FRACTIONAL_SECONDS_SCALE : valueLength),
+                                            isOutParam);
+                                }
+                            } else
+                                tdsWriter.writeRPCDateTimeOffset(name, ldt, minutesOffset, subSecondNanos,
+                                        TDS.MAX_FRACTIONAL_SECONDS_SCALE, isOutParam);
+
+                            break;
+
+                        default:
+                            assert false : "Unexpected JDBCType: " + jdbcType;
+
+                    }
+                }
+
+                // Yukon and earlier
+                // -----------------
+                //
+                // When sending as...
+                // - java.sql.Types.TIMESTAMP, use DATETIME SQL Server data type (all components)
+                // - java.sql.Types.TIME, use DATETIME SQL Server data type (with date = 1/1/1970)
+                // - java.sql.Types.DATE, use DATETIME SQL Server data type (with time = midnight)
+                // - microsoft.sql.Types.DATETIMEOFFSET (not supported - exception should have been thrown earlier)
+                else {
+                    assert JDBCType.TIME == jdbcType || JDBCType.DATE == jdbcType
+                            || JDBCType.TIMESTAMP == jdbcType : "Unexpected JDBCType: " + jdbcType;
+
+                    tdsWriter.writeRPCDateTime(name,
+                            timestampNormalizedLocalDateTime(ldt, javaType, TDS.BASE_YEAR_1970), subSecondNanos,
+                            isOutParam);
+                }
+            } // setters
+        }
+
+        private LocalDateTime parseTimestampIntoLocalDateTime(LocalDateTime ldt, String stringValue) {
+            int year = Integer.valueOf(stringValue.substring(0, 4));
+            int month = Integer.valueOf(stringValue.substring(5, 7));
+            int day = Integer.valueOf(stringValue.substring(8, 10));
+            int hour = Integer.valueOf(stringValue.substring(11, 13));
+            int minute = Integer.valueOf(stringValue.substring(14, 16));
+            int second = Integer.valueOf(stringValue.substring(17, 19));
+
+            ldt = LocalDateTime.of(year, month, day, hour, minute, second);
+            return ldt;
+        }
+        
         /**
          * Normalizes a GregorianCalendar value appropriately for a DATETIME, SMALLDATETIME, DATETIME2, or
          * DATETIMEOFFSET SQL Server data type.
@@ -1028,6 +1490,35 @@ final class DTV {
             }
 
             return calendar;
+        }
+
+        private LocalDateTime timestampNormalizedLocalDateTime(LocalDateTime ldt, JavaType javaType, int baseYear) {
+            if (null != ldt) {
+                switch (javaType) {
+                    case LOCALDATE:
+                    case DATE:
+                        // Note: Although UTILDATE is a Date object (java.util.Date) it cannot have normalized time
+                        // values.
+                        // This is because java.util.Date is mapped to JDBC TIMESTAMP according to the JDBC spec.
+                        // java.util.Calendar is also mapped to JDBC TIMESTAMP and hence should have both date and time
+                        // parts.
+                        ldt = LocalDateTime.of(ldt.getYear(), ldt.getMonth(), ldt.getDayOfMonth(), 0, 0, 0, 0);
+                        break;
+
+                    case OFFSETTIME:
+                    case LOCALTIME:
+                    case TIME:
+                        assert TDS.BASE_YEAR_1970 == baseYear || TDS.BASE_YEAR_1900 == baseYear;
+                        ldt = LocalDateTime.of(baseYear, 1, 1, ldt.getHour(), ldt.getMinute(), ldt.getSecond(),
+                                ldt.getNano());
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+
+            return ldt;
         }
 
         // Conversion from Date/Time/Timestamp to DATETIMEOFFSET reinterprets (changes)
@@ -1423,6 +1914,7 @@ final class DTV {
 
         /*
          * (non-Javadoc)
+         * 
          * @see com.microsoft.sqlserver.jdbc.DTVExecuteOp#execute(com.microsoft.sqlserver.jdbc.DTV,
          * microsoft.sql.SqlVariant)
          */
@@ -1699,11 +2191,11 @@ final class DTV {
                 case DATETIMEOFFSET:
                     op.execute(this, (microsoft.sql.DateTimeOffset) value);
                     break;
-                    
+
                 case GEOMETRY:
                     op.execute(this, ((Geometry) value).serialize());
                     break;
-                    
+
                 case GEOGRAPHY:
                     op.execute(this, ((Geography) value).serialize());
                     break;
@@ -2255,6 +2747,7 @@ final class AppDTVImpl extends DTVImpl {
 
         /*
          * (non-Javadoc)
+         * 
          * @see com.microsoft.sqlserver.jdbc.DTVExecuteOp#execute(com.microsoft.sqlserver.jdbc.DTV,
          * microsoft.sql.SqlVariant)
          */
@@ -2340,6 +2833,7 @@ final class AppDTVImpl extends DTVImpl {
 
     /*
      * (non-Javadoc)
+     * 
      * @see com.microsoft.sqlserver.jdbc.DTVImpl#getInternalVariant()
      */
     @Override

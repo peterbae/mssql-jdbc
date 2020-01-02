@@ -38,8 +38,10 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -3508,34 +3510,31 @@ final class TDSWriter {
     }
 
     void writeDate(String value) throws SQLServerException {
-        GregorianCalendar calendar = initializeCalender(TimeZone.getDefault());
         long utcMillis;
         java.sql.Date dateValue = java.sql.Date.valueOf(value);
         utcMillis = dateValue.getTime();
 
-        // Load the calendar with the desired value
-        calendar.setTimeInMillis(utcMillis);
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
+        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
 
-        writeScaledTemporal(calendar, 0, // subsecond nanos (none for a date value)
+        writeScaledTemporal(ldt, 0, // subsecond nanos (none for a date value)
                 0, // scale (dates are not scaled)
                 SSType.DATE);
     }
 
     void writeTime(java.sql.Timestamp value, int scale) throws SQLServerException {
-        GregorianCalendar calendar = initializeCalender(TimeZone.getDefault());
         long utcMillis; // Value to which the calendar is to be set (in milliseconds 1/1/1970 00:00:00 GMT)
         int subSecondNanos;
         utcMillis = value.getTime();
         subSecondNanos = value.getNanos();
+        
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
+        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
 
-        // Load the calendar with the desired value
-        calendar.setTimeInMillis(utcMillis);
-
-        writeScaledTemporal(calendar, subSecondNanos, scale, SSType.TIME);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.TIME);
     }
 
     void writeDateTimeOffset(Object value, int scale, SSType destSSType) throws SQLServerException {
-        GregorianCalendar calendar;
         TimeZone timeZone; // Time zone to associate with the value in the Gregorian calendar
         long utcMillis; // Value to which the calendar is to be set (in milliseconds 1/1/1970 00:00:00 GMT)
         int subSecondNanos;
@@ -3553,19 +3552,16 @@ final class TDSWriter {
         // the writers for those types expect local calendars.
         timeZone = (SSType.DATETIMEOFFSET == destSSType) ? UTC.timeZone
                                                          : new SimpleTimeZone(minutesOffset * 60 * 1000, "");
+        
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
+        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
 
-        calendar = new GregorianCalendar(timeZone, Locale.US);
-        calendar.setLenient(true);
-        calendar.clear();
-        calendar.setTimeInMillis(utcMillis);
-
-        writeScaledTemporal(calendar, subSecondNanos, scale, SSType.DATETIMEOFFSET);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIMEOFFSET);
 
         writeShort((short) minutesOffset);
     }
 
     void writeOffsetDateTimeWithTimezone(OffsetDateTime offsetDateTimeValue, int scale) throws SQLServerException {
-        GregorianCalendar calendar;
         TimeZone timeZone;
         long utcMillis;
         int subSecondNanos;
@@ -3606,24 +3602,23 @@ final class TDSWriter {
                 + offsetDateTimeValue.getHour() + ':' + offsetDateTimeValue.getMinute() + ':'
                 + offsetDateTimeValue.getSecond();
         utcMillis = Timestamp.valueOf(offDateTimeStr).getTime();
-        calendar = initializeCalender(timeZone);
-        calendar.setTimeInMillis(utcMillis);
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
+        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
 
-        // Local timezone value in minutes
-        int minuteAdjustment = ((TimeZone.getDefault().getRawOffset()) / (60 * 1000));
-        // check if date is in day light savings and add daylight saving minutes
-        if (TimeZone.getDefault().inDaylightTime(calendar.getTime()))
-            minuteAdjustment += (TimeZone.getDefault().getDSTSavings()) / (60 * 1000);
-        // If the local time is negative then positive minutesOffset must be subtracted from calender
-        minuteAdjustment += (minuteAdjustment < 0) ? (minutesOffset * (-1)) : minutesOffset;
-        calendar.add(Calendar.MINUTE, minuteAdjustment);
+//        // Local timezone value in minutes
+//        int minuteAdjustment = ((TimeZone.getDefault().getRawOffset()) / (60 * 1000));
+//        // check if date is in day light savings and add daylight saving minutes
+//        if (TimeZone.getDefault().inDaylightTime(calendar.getTime()))
+//            minuteAdjustment += (TimeZone.getDefault().getDSTSavings()) / (60 * 1000);
+//        // If the local time is negative then positive minutesOffset must be subtracted from calender
+//        minuteAdjustment += (minuteAdjustment < 0) ? (minutesOffset * (-1)) : minutesOffset;
+//        ldt = ldt.plusMinutes(minuteAdjustment);
 
-        writeScaledTemporal(calendar, subSecondNanos, scale, SSType.DATETIMEOFFSET);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIMEOFFSET);
         writeShort((short) minutesOffset);
     }
 
     void writeOffsetTimeWithTimezone(OffsetTime offsetTimeValue, int scale) throws SQLServerException {
-        GregorianCalendar calendar;
         TimeZone timeZone;
         long utcMillis;
         int subSecondNanos;
@@ -3664,18 +3659,21 @@ final class TDSWriter {
                 + offsetTimeValue.getMinute() + ':' + offsetTimeValue.getSecond();
         utcMillis = Timestamp.valueOf(offsetTimeStr).getTime();
 
-        calendar = initializeCalender(timeZone);
-        calendar.setTimeInMillis(utcMillis);
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
+        ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
+        
+//        calendar = initializeCalender(timeZone);
+//        calendar.setTimeInMillis(utcMillis);
+//
+//        int minuteAdjustment = (TimeZone.getDefault().getRawOffset()) / (60 * 1000);
+//        // check if date is in day light savings and add daylight saving minutes to Local timezone(in minutes)
+//        if (TimeZone.getDefault().inDaylightTime(calendar.getTime()))
+//            minuteAdjustment += ((TimeZone.getDefault().getDSTSavings()) / (60 * 1000));
+//        // If the local time is negative then positive minutesOffset must be subtracted from calender
+//        minuteAdjustment += (minuteAdjustment < 0) ? (minutesOffset * (-1)) : minutesOffset;
+//        calendar.add(Calendar.MINUTE, minuteAdjustment);
 
-        int minuteAdjustment = (TimeZone.getDefault().getRawOffset()) / (60 * 1000);
-        // check if date is in day light savings and add daylight saving minutes to Local timezone(in minutes)
-        if (TimeZone.getDefault().inDaylightTime(calendar.getTime()))
-            minuteAdjustment += ((TimeZone.getDefault().getDSTSavings()) / (60 * 1000));
-        // If the local time is negative then positive minutesOffset must be subtracted from calender
-        minuteAdjustment += (minuteAdjustment < 0) ? (minutesOffset * (-1)) : minutesOffset;
-        calendar.add(Calendar.MINUTE, minuteAdjustment);
-
-        writeScaledTemporal(calendar, subSecondNanos, scale, SSType.DATETIMEOFFSET);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIMEOFFSET);
         writeShort((short) minutesOffset);
     }
 
@@ -5303,17 +5301,17 @@ final class TDSWriter {
      *        boolean true if the data value is being registered as an output parameter
      *
      */
-    void writeRPCDateTime(String sName, GregorianCalendar cal, int subSecondNanos,
+    void writeRPCDateTime(String sName, LocalDateTime ldt, int subSecondNanos,
             boolean bOut) throws SQLServerException {
         assert (subSecondNanos >= 0) && (subSecondNanos < Nanos.PER_SECOND) : "Invalid subNanoSeconds value: "
                 + subSecondNanos;
-        assert (cal != null) || (subSecondNanos == 0) : "Invalid subNanoSeconds value when calendar is null: "
+        assert (ldt != null) || (subSecondNanos == 0) : "Invalid subNanoSeconds value when calendar is null: "
                 + subSecondNanos;
 
         writeRPCNameValType(sName, bOut, TDSType.DATETIMEN);
         writeByte((byte) 8); // max length of datatype
 
-        if (null == cal) {
+        if (null == ldt) {
             writeByte((byte) 0); // len of data bytes
             return;
         }
@@ -5337,16 +5335,16 @@ final class TDSWriter {
 
         // First, figure out how many days there have been since the SQL Base Date.
         // These are based on SQL Server algorithms
-        int daysSinceSQLBaseDate = DDC.daysSinceBaseDate(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR),
+        int daysSinceSQLBaseDate = DDC.daysSinceBaseDate(ldt.getYear(), ldt.getDayOfYear(),
                 TDS.BASE_YEAR_1900);
 
         // Next, figure out the number of milliseconds since midnight of the current day.
         int millisSinceMidnight = (subSecondNanos + Nanos.PER_MILLISECOND / 2) / Nanos.PER_MILLISECOND + // Millis into
                                                                                                          // the current
                                                                                                          // second
-                1000 * cal.get(Calendar.SECOND) + // Seconds into the current minute
-                60 * 1000 * cal.get(Calendar.MINUTE) + // Minutes into the current hour
-                60 * 60 * 1000 * cal.get(Calendar.HOUR_OF_DAY); // Hours into the current day
+                1000 * ldt.getSecond() + // Seconds into the current minute
+                60 * 1000 * ldt.getMinute() + // Minutes into the current hour
+                60 * 60 * 1000 * ldt.getHour(); // Hours into the current day
 
         // The last millisecond of the current day is always rounded to the first millisecond
         // of the next day because DATETIME is only accurate to 1/300th of a second.
@@ -5378,52 +5376,52 @@ final class TDSWriter {
         writeInt((3 * millisSinceMidnight + 5) / 10);
     }
 
-    void writeRPCTime(String sName, GregorianCalendar localCalendar, int subSecondNanos, int scale,
+    void writeRPCTime(String sName, LocalDateTime ldt, int subSecondNanos, int scale,
             boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.TIMEN);
         writeByte((byte) scale);
 
-        if (null == localCalendar) {
+        if (null == ldt) {
             writeByte((byte) 0);
             return;
         }
 
         writeByte((byte) TDS.timeValueLength(scale));
-        writeScaledTemporal(localCalendar, subSecondNanos, scale, SSType.TIME);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.TIME);
     }
 
-    void writeRPCDate(String sName, GregorianCalendar localCalendar, boolean bOut) throws SQLServerException {
+    void writeRPCDate(String sName, LocalDateTime ldt, boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.DATEN);
-        if (null == localCalendar) {
+        if (null == ldt) {
             writeByte((byte) 0);
             return;
         }
 
         writeByte((byte) TDS.DAYS_INTO_CE_LENGTH);
-        writeScaledTemporal(localCalendar, 0, // subsecond nanos (none for a date value)
+        writeScaledTemporal(ldt, 0, // subsecond nanos (none for a date value)
                 0, // scale (dates are not scaled)
                 SSType.DATE);
     }
 
-    void writeEncryptedRPCTime(String sName, GregorianCalendar localCalendar, int subSecondNanos, int scale,
+    void writeEncryptedRPCTime(String sName, LocalDateTime ldt, int subSecondNanos, int scale,
             boolean bOut) throws SQLServerException {
         if (con.getSendTimeAsDatetime()) {
             throw new SQLServerException(SQLServerException.getErrString("R_sendTimeAsDateTimeForAE"), null);
         }
         writeRPCNameValType(sName, bOut, TDSType.BIGVARBINARY);
 
-        if (null == localCalendar)
+        if (null == ldt)
             writeEncryptedRPCByteArray(null);
         else
             writeEncryptedRPCByteArray(
-                    writeEncryptedScaledTemporal(localCalendar, subSecondNanos, scale, SSType.TIME, (short) 0));
+                    writeEncryptedScaledTemporal(ldt, subSecondNanos, scale, SSType.TIME, (short) 0));
 
         writeByte(TDSType.TIMEN.byteValue());
         writeByte((byte) scale);
         writeCryptoMetaData();
     }
 
-    void writeEncryptedRPCDate(String sName, GregorianCalendar localCalendar, boolean bOut) throws SQLServerException {
+    void writeEncryptedRPCDate(String sName, LocalDateTime localCalendar, boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.BIGVARBINARY);
 
         if (null == localCalendar)
@@ -5438,19 +5436,19 @@ final class TDSWriter {
         writeCryptoMetaData();
     }
 
-    void writeEncryptedRPCDateTime(String sName, GregorianCalendar cal, int subSecondNanos, boolean bOut,
+    void writeEncryptedRPCDateTime(String sName, LocalDateTime ldt, int subSecondNanos, boolean bOut,
             JDBCType jdbcType) throws SQLServerException {
         assert (subSecondNanos >= 0) && (subSecondNanos < Nanos.PER_SECOND) : "Invalid subNanoSeconds value: "
                 + subSecondNanos;
-        assert (cal != null) || (subSecondNanos == 0) : "Invalid subNanoSeconds value when calendar is null: "
+        assert (ldt != null) || (subSecondNanos == 0) : "Invalid subNanoSeconds value when calendar is null: "
                 + subSecondNanos;
 
         writeRPCNameValType(sName, bOut, TDSType.BIGVARBINARY);
 
-        if (null == cal)
+        if (null == ldt)
             writeEncryptedRPCByteArray(null);
         else
-            writeEncryptedRPCByteArray(getEncryptedDateTimeAsBytes(cal, subSecondNanos, jdbcType));
+            writeEncryptedRPCByteArray(getEncryptedDateTimeAsBytes(ldt, subSecondNanos, jdbcType));
 
         if (JDBCType.SMALLDATETIME == jdbcType) {
             writeByte(TDSType.DATETIMEN.byteValue());
@@ -5463,18 +5461,18 @@ final class TDSWriter {
     }
 
     // getEncryptedDateTimeAsBytes is called if jdbcType/ssType is SMALLDATETIME or DATETIME
-    byte[] getEncryptedDateTimeAsBytes(GregorianCalendar cal, int subSecondNanos,
+    byte[] getEncryptedDateTimeAsBytes(LocalDateTime ldt, int subSecondNanos,
             JDBCType jdbcType) throws SQLServerException {
-        int daysSinceSQLBaseDate = DDC.daysSinceBaseDate(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR),
+        int daysSinceSQLBaseDate = DDC.daysSinceBaseDate(ldt.getYear(), ldt.getDayOfYear(),
                 TDS.BASE_YEAR_1900);
 
         // Next, figure out the number of milliseconds since midnight of the current day.
         int millisSinceMidnight = (subSecondNanos + Nanos.PER_MILLISECOND / 2) / Nanos.PER_MILLISECOND + // Millis into
                                                                                                          // the current
                                                                                                          // second
-                1000 * cal.get(Calendar.SECOND) + // Seconds into the current minute
-                60 * 1000 * cal.get(Calendar.MINUTE) + // Minutes into the current hour
-                60 * 60 * 1000 * cal.get(Calendar.HOUR_OF_DAY); // Hours into the current day
+                1000 * ldt.getSecond() + // Seconds into the current minute
+                60 * 1000 * ldt.getMinute() + // Minutes into the current hour
+                60 * 60 * 1000 * ldt.getHour(); // Hours into the current day
 
         // The last millisecond of the current day is always rounded to the first millisecond
         // of the next day because DATETIME is only accurate to 1/300th of a second.
@@ -5551,30 +5549,29 @@ final class TDSWriter {
         return null;
     }
 
-    void writeEncryptedRPCDateTime2(String sName, GregorianCalendar localCalendar, int subSecondNanos, int scale,
+    void writeEncryptedRPCDateTime2(String sName, LocalDateTime ldt, int subSecondNanos, int scale,
             boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.BIGVARBINARY);
 
-        if (null == localCalendar)
+        if (null == ldt)
             writeEncryptedRPCByteArray(null);
         else
             writeEncryptedRPCByteArray(
-                    writeEncryptedScaledTemporal(localCalendar, subSecondNanos, scale, SSType.DATETIME2, (short) 0));
+                    writeEncryptedScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIME2, (short) 0));
 
         writeByte(TDSType.DATETIME2N.byteValue());
         writeByte((byte) (scale));
         writeCryptoMetaData();
     }
 
-    void writeEncryptedRPCDateTimeOffset(String sName, GregorianCalendar utcCalendar, int minutesOffset,
+    void writeEncryptedRPCDateTimeOffset(String sName, LocalDateTime ldt, int minutesOffset,
             int subSecondNanos, int scale, boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.BIGVARBINARY);
 
-        if (null == utcCalendar)
+        if (null == ldt)
             writeEncryptedRPCByteArray(null);
         else {
-            assert 0 == utcCalendar.get(Calendar.ZONE_OFFSET);
-            writeEncryptedRPCByteArray(writeEncryptedScaledTemporal(utcCalendar, subSecondNanos, scale,
+            writeEncryptedRPCByteArray(writeEncryptedScaledTemporal(ldt, subSecondNanos, scale,
                     SSType.DATETIMEOFFSET, (short) minutesOffset));
         }
 
@@ -5584,34 +5581,32 @@ final class TDSWriter {
 
     }
 
-    void writeRPCDateTime2(String sName, GregorianCalendar localCalendar, int subSecondNanos, int scale,
+    void writeRPCDateTime2(String sName, LocalDateTime ldt, int subSecondNanos, int scale,
             boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.DATETIME2N);
         writeByte((byte) scale);
 
-        if (null == localCalendar) {
+        if (null == ldt) {
             writeByte((byte) 0);
             return;
         }
 
         writeByte((byte) TDS.datetime2ValueLength(scale));
-        writeScaledTemporal(localCalendar, subSecondNanos, scale, SSType.DATETIME2);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIME2);
     }
 
-    void writeRPCDateTimeOffset(String sName, GregorianCalendar utcCalendar, int minutesOffset, int subSecondNanos,
+    void writeRPCDateTimeOffset(String sName, LocalDateTime ldt, int minutesOffset, int subSecondNanos,
             int scale, boolean bOut) throws SQLServerException {
         writeRPCNameValType(sName, bOut, TDSType.DATETIMEOFFSETN);
         writeByte((byte) scale);
 
-        if (null == utcCalendar) {
+        if (null == ldt) {
             writeByte((byte) 0);
             return;
         }
 
-        assert 0 == utcCalendar.get(Calendar.ZONE_OFFSET);
-
         writeByte((byte) TDS.datetimeoffsetValueLength(scale));
-        writeScaledTemporal(utcCalendar, subSecondNanos, scale, SSType.DATETIMEOFFSET);
+        writeScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIMEOFFSET);
 
         writeShort((short) minutesOffset);
     }
@@ -5645,7 +5640,7 @@ final class TDSWriter {
      * @throws SQLServerException
      *         if an I/O error occurs or if the value is not in the valid range
      */
-    private void writeScaledTemporal(GregorianCalendar cal, int subSecondNanos, int scale,
+    private void writeScaledTemporal(LocalDateTime ldt, int subSecondNanos, int scale,
             SSType ssType) throws SQLServerException {
 
         assert con.isKatmaiOrLater();
@@ -5660,8 +5655,8 @@ final class TDSWriter {
             assert scale >= 0;
             assert scale <= TDS.MAX_FRACTIONAL_SECONDS_SCALE;
 
-            int secondsSinceMidnight = cal.get(Calendar.SECOND) + 60 * cal.get(Calendar.MINUTE)
-                    + 60 * 60 * cal.get(Calendar.HOUR_OF_DAY);
+            int secondsSinceMidnight = ldt.getSecond() + 60 * ldt.getMinute()
+                    + 60 * 60 * ldt.getHour();
 
             // Scale nanos since midnight to the desired scale, rounding the value as necessary
             long divisor = Nanos.PER_MAX_SCALE_INTERVAL * (long) Math.pow(10, TDS.MAX_FRACTIONAL_SECONDS_SCALE - scale);
@@ -5699,12 +5694,12 @@ final class TDSWriter {
                     // This case is very likely never hit by "real world" applications, but exists
                     // here as a security measure to ensure that such values don't result in a
                     // connection-closing TDS exception.
-                    cal.add(Calendar.SECOND, 1);
+                    ldt = ldt.plusSeconds(1);
 
-                    if (cal.get(Calendar.YEAR) <= 9999) {
+                    if (ldt.getYear() <= 9999) {
                         scaledNanos = 0;
                     } else {
-                        cal.add(Calendar.SECOND, -1);
+                        ldt = ldt.minusSeconds(1);
                         --scaledNanos;
                     }
                 }
@@ -5719,28 +5714,7 @@ final class TDSWriter {
 
         // Second, for types with a date component, write the days into the Common Era
         if (SSType.DATE == ssType || SSType.DATETIME2 == ssType || SSType.DATETIMEOFFSET == ssType) {
-            // Computation of the number of days into the Common Era assumes that
-            // the DAY_OF_YEAR field reflects a pure Gregorian calendar - one that
-            // uses Gregorian leap year rules across the entire range of dates.
-            //
-            // For the DAY_OF_YEAR field to accurately reflect pure Gregorian behavior,
-            // we need to use a pure Gregorian calendar for dates that are Julian dates
-            // under a standard Gregorian calendar and for (Gregorian) dates later than
-            // the cutover date in the cutover year.
-            if (cal.getTimeInMillis() < GregorianChange.STANDARD_CHANGE_DATE.getTime()
-                    || cal.getActualMaximum(Calendar.DAY_OF_YEAR) < TDS.DAYS_PER_YEAR) {
-                int year = cal.get(Calendar.YEAR);
-                int month = cal.get(Calendar.MONTH);
-                int date = cal.get(Calendar.DATE);
-
-                // Set the cutover as early as possible (pure Gregorian behavior)
-                cal.setGregorianChange(GregorianChange.PURE_CHANGE_DATE);
-
-                // Initialize the date field by field (preserving the "wall calendar" value)
-                cal.set(year, month, date);
-            }
-
-            int daysIntoCE = DDC.daysSinceBaseDate(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR), 1);
+            int daysIntoCE = DDC.daysSinceBaseDate(ldt.getYear(), ldt.getDayOfYear(), 1);
 
             // Last-ditch verification that the value is in the valid range for the
             // DATE/DATETIME2/DATETIMEOFFSET TDS data type (1/1/0001 to 12/31/9999).
@@ -5779,7 +5753,7 @@ final class TDSWriter {
      * @throws SQLServerException
      *         if an I/O error occurs or if the value is not in the valid range
      */
-    byte[] writeEncryptedScaledTemporal(GregorianCalendar cal, int subSecondNanos, int scale, SSType ssType,
+    byte[] writeEncryptedScaledTemporal(LocalDateTime ldt, int subSecondNanos, int scale, SSType ssType,
             short minutesOffset) throws SQLServerException {
         assert con.isKatmaiOrLater();
 
@@ -5800,8 +5774,7 @@ final class TDSWriter {
             assert scale >= 0;
             assert scale <= TDS.MAX_FRACTIONAL_SECONDS_SCALE;
 
-            secondsSinceMidnight = cal.get(Calendar.SECOND) + 60 * cal.get(Calendar.MINUTE)
-                    + 60 * 60 * cal.get(Calendar.HOUR_OF_DAY);
+            secondsSinceMidnight = ldt.getSecond() + 60 * ldt.getMinute() + 60 * 60 * ldt.getHour();
 
             // Scale nanos since midnight to the desired scale, rounding the value as necessary
             divisor = Nanos.PER_MAX_SCALE_INTERVAL * (long) Math.pow(10, TDS.MAX_FRACTIONAL_SECONDS_SCALE - scale);
@@ -5846,12 +5819,12 @@ final class TDSWriter {
                     // This case is very likely never hit by "real world" applications, but exists
                     // here as a security measure to ensure that such values don't result in a
                     // connection-closing TDS exception.
-                    cal.add(Calendar.SECOND, 1);
+                    ldt.plusSeconds(1);
 
-                    if (cal.get(Calendar.YEAR) <= 9999) {
+                    if (ldt.getYear() <= 9999) {
                         scaledNanos = 0;
                     } else {
-                        cal.add(Calendar.SECOND, -1);
+                        ldt.minusSeconds(1);
                         --scaledNanos;
                     }
                 }
@@ -5877,28 +5850,7 @@ final class TDSWriter {
 
         // Second, for types with a date component, write the days into the Common Era
         if (SSType.DATE == ssType || SSType.DATETIME2 == ssType || SSType.DATETIMEOFFSET == ssType) {
-            // Computation of the number of days into the Common Era assumes that
-            // the DAY_OF_YEAR field reflects a pure Gregorian calendar - one that
-            // uses Gregorian leap year rules across the entire range of dates.
-            //
-            // For the DAY_OF_YEAR field to accurately reflect pure Gregorian behavior,
-            // we need to use a pure Gregorian calendar for dates that are Julian dates
-            // under a standard Gregorian calendar and for (Gregorian) dates later than
-            // the cutover date in the cutover year.
-            if (cal.getTimeInMillis() < GregorianChange.STANDARD_CHANGE_DATE.getTime()
-                    || cal.getActualMaximum(Calendar.DAY_OF_YEAR) < TDS.DAYS_PER_YEAR) {
-                int year = cal.get(Calendar.YEAR);
-                int month = cal.get(Calendar.MONTH);
-                int date = cal.get(Calendar.DATE);
-
-                // Set the cutover as early as possible (pure Gregorian behavior)
-                cal.setGregorianChange(GregorianChange.PURE_CHANGE_DATE);
-
-                // Initialize the date field by field (preserving the "wall calendar" value)
-                cal.set(year, month, date);
-            }
-
-            int daysIntoCE = DDC.daysSinceBaseDate(cal.get(Calendar.YEAR), cal.get(Calendar.DAY_OF_YEAR), 1);
+            int daysIntoCE = DDC.daysSinceBaseDate(ldt.getYear(), ldt.getDayOfYear(), 1);
 
             // Last-ditch verification that the value is in the valid range for the
             // DATE/DATETIME2/DATETIMEOFFSET TDS data type (1/1/0001 to 12/31/9999).

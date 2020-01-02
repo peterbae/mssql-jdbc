@@ -25,10 +25,12 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.MessageFormat;
 import java.time.DateTimeException;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -40,7 +42,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.SimpleTimeZone;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 import java.util.logging.Level;
@@ -3186,24 +3187,19 @@ public class SQLServerBulkCopy implements java.lang.AutoCloseable, java.io.Seria
     private byte[] getEncryptedTemporalBytes(TDSWriter tdsWriter, JDBCType srcTemporalJdbcType, Object colValue,
             int srcColOrdinal, int scale) throws SQLServerException {
         long utcMillis;
-        GregorianCalendar calendar;
+        
+        LocalDateTime ldt = LocalDateTime.of(TDS.BASE_YEAR_1970, 1, 1, 0, 0);
 
         switch (srcTemporalJdbcType) {
             case DATE:
-                calendar = new GregorianCalendar(java.util.TimeZone.getDefault(), java.util.Locale.US);
-                calendar.setLenient(true);
-                calendar.clear();
-                calendar.setTimeInMillis(((Date) colValue).getTime());
-                return tdsWriter.writeEncryptedScaledTemporal(calendar, 0, // subsecond nanos (none for a date value)
+                ldt = ldt.plus(((Date) colValue).getTime(), ChronoUnit.MILLIS);
+                return tdsWriter.writeEncryptedScaledTemporal(ldt, 0, // subsecond nanos (none for a date value)
                         0, // scale (dates are not scaled)
                         SSType.DATE, (short) 0);
 
             case TIME:
-                calendar = new GregorianCalendar(java.util.TimeZone.getDefault(), java.util.Locale.US);
-                calendar.setLenient(true);
-                calendar.clear();
                 utcMillis = ((java.sql.Timestamp) colValue).getTime();
-                calendar.setTimeInMillis(utcMillis);
+                ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
                 int subSecondNanos;
                 if (colValue instanceof java.sql.Timestamp) {
                     subSecondNanos = ((java.sql.Timestamp) colValue).getNanos();
@@ -3212,38 +3208,29 @@ public class SQLServerBulkCopy implements java.lang.AutoCloseable, java.io.Seria
                     if (subSecondNanos < 0)
                         subSecondNanos += Nanos.PER_SECOND;
                 }
-                return tdsWriter.writeEncryptedScaledTemporal(calendar, subSecondNanos, scale, SSType.TIME, (short) 0);
+                return tdsWriter.writeEncryptedScaledTemporal(ldt, subSecondNanos, scale, SSType.TIME, (short) 0);
 
             case TIMESTAMP:
-                calendar = new GregorianCalendar(java.util.TimeZone.getDefault(), java.util.Locale.US);
-                calendar.setLenient(true);
-                calendar.clear();
                 utcMillis = ((java.sql.Timestamp) colValue).getTime();
-                calendar.setTimeInMillis(utcMillis);
+                ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);                
                 subSecondNanos = ((java.sql.Timestamp) colValue).getNanos();
-                return tdsWriter.writeEncryptedScaledTemporal(calendar, subSecondNanos, scale, SSType.DATETIME2,
+                return tdsWriter.writeEncryptedScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIME2,
                         (short) 0);
 
             case DATETIME:
             case SMALLDATETIME:
-                calendar = new GregorianCalendar(java.util.TimeZone.getDefault(), java.util.Locale.US);
-                calendar.setLenient(true);
-                calendar.clear();
                 utcMillis = ((java.sql.Timestamp) colValue).getTime();
-                calendar.setTimeInMillis(utcMillis);
+                ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
                 subSecondNanos = ((java.sql.Timestamp) colValue).getNanos();
-                return tdsWriter.getEncryptedDateTimeAsBytes(calendar, subSecondNanos, srcTemporalJdbcType);
+                return tdsWriter.getEncryptedDateTimeAsBytes(ldt, subSecondNanos, srcTemporalJdbcType);
 
             case DATETIMEOFFSET:
                 microsoft.sql.DateTimeOffset dtoValue = (microsoft.sql.DateTimeOffset) colValue;
                 utcMillis = dtoValue.getTimestamp().getTime();
                 subSecondNanos = dtoValue.getTimestamp().getNanos();
                 int minutesOffset = dtoValue.getMinutesOffset();
-                calendar = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
-                calendar.setLenient(true);
-                calendar.clear();
-                calendar.setTimeInMillis(utcMillis);
-                return tdsWriter.writeEncryptedScaledTemporal(calendar, subSecondNanos, scale, SSType.DATETIMEOFFSET,
+                ldt = ldt.plus(utcMillis, ChronoUnit.MILLIS);
+                return tdsWriter.writeEncryptedScaledTemporal(ldt, subSecondNanos, scale, SSType.DATETIMEOFFSET,
                         (short) minutesOffset);
 
             default:

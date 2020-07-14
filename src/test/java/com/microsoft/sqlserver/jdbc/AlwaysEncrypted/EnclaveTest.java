@@ -11,7 +11,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ParameterMetaData;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -193,37 +192,37 @@ public class EnclaveTest extends AESetup {
         }
     }
 
-    /*
-     * Tests alter column encryption on char tables
-     */
-    @ParameterizedTest
-    @MethodSource("enclaveParams")
-    public void testChar(String serverName, String url, String protocol) throws Exception {
-        setAEConnectionString(serverName, url, protocol);
-        try (SQLServerConnection con = PrepUtil.getConnection(AETestConnectionString, AEInfo);
-                SQLServerStatement stmt = (SQLServerStatement) con.createStatement()) {
-            TestUtils.dropTableIfExists(CHAR_TABLE_AE, stmt);
-            createTable(CHAR_TABLE_AE, cekJks, charTable);
-            populateCharNormalCase(createCharValues(false));
-            testAlterColumnEncryption(stmt, CHAR_TABLE_AE, charTable, cekJks);
-        }
-    }
-
-    /*
-     * Tests alter column encryption on char tables with AKV
-     */
-    @ParameterizedTest
-    @MethodSource("enclaveParams")
-    public void testCharAkv(String serverName, String url, String protocol) throws Exception {
-        setAEConnectionString(serverName, url, protocol);
-        try (SQLServerConnection con = PrepUtil.getConnection(AETestConnectionString, AEInfo);
-                SQLServerStatement stmt = (SQLServerStatement) con.createStatement()) {
-            TestUtils.dropTableIfExists(CHAR_TABLE_AE, stmt);
-            createTable(CHAR_TABLE_AE, cekAkv, charTable);
-            populateCharNormalCase(createCharValues(false));
-            testAlterColumnEncryption(stmt, CHAR_TABLE_AE, charTable, cekAkv);
-        }
-    }
+//    /*
+//     * Tests alter column encryption on char tables
+//     */
+//    @ParameterizedTest
+//    @MethodSource("enclaveParams")
+//    public void testChar(String serverName, String url, String protocol) throws Exception {
+//        setAEConnectionString(serverName, url, protocol);
+//        try (SQLServerConnection con = PrepUtil.getConnection(AETestConnectionString, AEInfo);
+//                SQLServerStatement stmt = (SQLServerStatement) con.createStatement()) {
+//            TestUtils.dropTableIfExists(CHAR_TABLE_AE, stmt);
+//            createTable(CHAR_TABLE_AE, cekJks, charTable);
+//            populateCharNormalCase(createCharValues(false));
+//            testAlterColumnEncryption(stmt, CHAR_TABLE_AE, charTable, cekJks);
+//        }
+//    }
+//
+//    /*
+//     * Tests alter column encryption on char tables with AKV
+//     */
+//    @ParameterizedTest
+//    @MethodSource("enclaveParams")
+//    public void testCharAkv(String serverName, String url, String protocol) throws Exception {
+//        setAEConnectionString(serverName, url, protocol);
+//        try (SQLServerConnection con = PrepUtil.getConnection(AETestConnectionString, AEInfo);
+//                SQLServerStatement stmt = (SQLServerStatement) con.createStatement()) {
+//            TestUtils.dropTableIfExists(CHAR_TABLE_AE, stmt);
+//            createTable(CHAR_TABLE_AE, cekAkv, charTable);
+//            populateCharNormalCase(createCharValues(false));
+//            testAlterColumnEncryption(stmt, CHAR_TABLE_AE, charTable, cekAkv);
+//        }
+//    }
 
     /**
      * Test FMTOnly with Always Encrypted
@@ -246,81 +245,81 @@ public class EnclaveTest extends AESetup {
             }
         }
     }
-
-    /**
-     * Test alter column
-     */
-    @ParameterizedTest
-    @MethodSource("enclaveParams")
-    public void testAlter(String serverName, String url, String protocol) throws Exception {
-        setAEConnectionString(serverName, url, protocol);
-        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
-                Statement s = c.createStatement()) {
-            createTable(CHAR_TABLE_AE, cekJks, varcharTableSimple);
-            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + CHAR_TABLE_AE + " VALUES (?,?,?)");
-            pstmt.setString(1, "a");
-            pstmt.setString(2, "b");
-            pstmt.setString(3, "test");
-            pstmt.execute();
-            pstmt = c.prepareStatement("ALTER TABLE " + CHAR_TABLE_AE
-                    + " ALTER COLUMN RandomizedVarchar VARCHAR(20) NULL WITH (ONLINE = ON)");
-            pstmt.execute();
-        }
-    }
-
-    /**
-     * Rich Query with number compare
-     */
-    @ParameterizedTest
-    @MethodSource("enclaveParams")
-    public void testNumericRichQuery(String serverName, String url, String protocol) throws Exception {
-        setAEConnectionString(serverName, url, protocol);
-        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
-                Statement s = c.createStatement()) {
-            createTable(NUMERIC_TABLE_AE, cekJks, numericTableSimple);
-            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + NUMERIC_TABLE_AE + " VALUES (?,?,?)");
-            pstmt.setInt(1, 1);
-            pstmt.setInt(2, 2);
-            pstmt.setInt(3, 3);
-            pstmt.execute();
-            pstmt = c.prepareStatement("SELECT * FROM " + NUMERIC_TABLE_AE + " WHERE RANDOMIZEDInt = ?");
-            pstmt.setInt(1, 3);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    assertTrue(1 == rs.getInt(1));
-                    assertTrue(2 == rs.getInt(2));
-                    assertTrue(3 == rs.getInt(3));
-                }
-            }
-        }
-    }
-
-    /**
-     * Rich Query with string compare
-     */
-    @ParameterizedTest
-    @MethodSource("enclaveParams")
-    public void testStringRichQuery(String serverName, String url, String protocol) throws Exception {
-        setAEConnectionString(serverName, url, protocol);
-        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
-                Statement s = c.createStatement()) {
-            createTable(CHAR_TABLE_AE, cekJks, varcharTableSimple);
-            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + CHAR_TABLE_AE + " VALUES (?,?,?)");
-            pstmt.setString(1, "a");
-            pstmt.setString(2, "b");
-            pstmt.setString(3, "test");
-            pstmt.execute();
-            pstmt = c.prepareStatement("SELECT * FROM " + CHAR_TABLE_AE + " WHERE RANDOMIZEDVarchar LIKE ?");
-            pstmt.setString(1, "t%");
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    assertTrue(rs.getString(1).equalsIgnoreCase("a"));
-                    assertTrue(rs.getString(2).equalsIgnoreCase("b"));
-                    assertTrue(rs.getString(3).equalsIgnoreCase("test"));
-                }
-            }
-        }
-    }
+//
+//    /**
+//     * Test alter column
+//     */
+//    @ParameterizedTest
+//    @MethodSource("enclaveParams")
+//    public void testAlter(String serverName, String url, String protocol) throws Exception {
+//        setAEConnectionString(serverName, url, protocol);
+//        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
+//                Statement s = c.createStatement()) {
+//            createTable(CHAR_TABLE_AE, cekJks, varcharTableSimple);
+//            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + CHAR_TABLE_AE + " VALUES (?,?,?)");
+//            pstmt.setString(1, "a");
+//            pstmt.setString(2, "b");
+//            pstmt.setString(3, "test");
+//            pstmt.execute();
+//            pstmt = c.prepareStatement("ALTER TABLE " + CHAR_TABLE_AE
+//                    + " ALTER COLUMN RandomizedVarchar VARCHAR(20) NULL WITH (ONLINE = ON)");
+//            pstmt.execute();
+//        }
+//    }
+//
+//    /**
+//     * Rich Query with number compare
+//     */
+//    @ParameterizedTest
+//    @MethodSource("enclaveParams")
+//    public void testNumericRichQuery(String serverName, String url, String protocol) throws Exception {
+//        setAEConnectionString(serverName, url, protocol);
+//        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
+//                Statement s = c.createStatement()) {
+//            createTable(NUMERIC_TABLE_AE, cekJks, numericTableSimple);
+//            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + NUMERIC_TABLE_AE + " VALUES (?,?,?)");
+//            pstmt.setInt(1, 1);
+//            pstmt.setInt(2, 2);
+//            pstmt.setInt(3, 3);
+//            pstmt.execute();
+//            pstmt = c.prepareStatement("SELECT * FROM " + NUMERIC_TABLE_AE + " WHERE RANDOMIZEDInt = ?");
+//            pstmt.setInt(1, 3);
+//            try (ResultSet rs = pstmt.executeQuery()) {
+//                while (rs.next()) {
+//                    assertTrue(1 == rs.getInt(1));
+//                    assertTrue(2 == rs.getInt(2));
+//                    assertTrue(3 == rs.getInt(3));
+//                }
+//            }
+//        }
+//    }
+//
+//    /**
+//     * Rich Query with string compare
+//     */
+//    @ParameterizedTest
+//    @MethodSource("enclaveParams")
+//    public void testStringRichQuery(String serverName, String url, String protocol) throws Exception {
+//        setAEConnectionString(serverName, url, protocol);
+//        try (SQLServerConnection c = PrepUtil.getConnection(AETestConnectionString, AEInfo);
+//                Statement s = c.createStatement()) {
+//            createTable(CHAR_TABLE_AE, cekJks, varcharTableSimple);
+//            PreparedStatement pstmt = c.prepareStatement("INSERT INTO " + CHAR_TABLE_AE + " VALUES (?,?,?)");
+//            pstmt.setString(1, "a");
+//            pstmt.setString(2, "b");
+//            pstmt.setString(3, "test");
+//            pstmt.execute();
+//            pstmt = c.prepareStatement("SELECT * FROM " + CHAR_TABLE_AE + " WHERE RANDOMIZEDVarchar LIKE ?");
+//            pstmt.setString(1, "t%");
+//            try (ResultSet rs = pstmt.executeQuery()) {
+//                while (rs.next()) {
+//                    assertTrue(rs.getString(1).equalsIgnoreCase("a"));
+//                    assertTrue(rs.getString(2).equalsIgnoreCase("b"));
+//                    assertTrue(rs.getString(3).equalsIgnoreCase("test"));
+//                }
+//            }
+//        }
+//    }
     
     /**
      * Test alter column with a non AEv2 connection

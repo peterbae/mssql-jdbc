@@ -28,6 +28,7 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.SelectionKey;
@@ -73,7 +74,6 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-import java.nio.Buffer;
 
 final class TDS {
     // TDS protocol versions
@@ -1423,25 +1423,66 @@ final class TDSChannel {
             return commonName;
         }
 
-        private boolean validateServerName(String nameInCert) throws CertificateException {
+        private boolean validateServerName(String nameInCert) {
             // Failed to get the common name from DN or empty CN
             if (null == nameInCert) {
-                if (logger.isLoggable(Level.FINER))
+                if (logger.isLoggable(Level.FINER)) {
                     logger.finer(logContext + " Failed to parse the name from the certificate or name is empty.");
+                }
                 return false;
             }
-
+            // We do not allow wildcards in IDNs (xn--).
+            if (!nameInCert.startsWith("xn--") && nameInCert.contains("*")) {
+                int hostIndex = 0, certIndex = 0, match = 0, startIndex = -1, periodCount = 0;
+                while (hostIndex < hostName.length()) {
+                    if ('.' == hostName.charAt(hostIndex)) {
+                        periodCount++;
+                    }
+                    if (certIndex < nameInCert.length() && hostName.charAt(hostIndex) == nameInCert.charAt(certIndex)) {
+                        hostIndex++;
+                        certIndex++;
+                    } else if (certIndex < nameInCert.length() && '*' == nameInCert.charAt(certIndex)) {
+                        startIndex = certIndex;
+                        match = hostIndex;
+                        certIndex++;
+                    } else if (startIndex != -1 && 0 == periodCount) {
+                        certIndex = startIndex + 1;
+                        match++;
+                        hostIndex = match;
+                    } else {
+                        logFailMessage(nameInCert);
+                        return false;
+                    }
+                }
+                if (nameInCert.length() == certIndex && periodCount > 1) {
+                    logSuccessMessage(nameInCert);
+                    return true;
+                } else {
+                    logFailMessage(nameInCert);
+                    return false;
+                }
+            }
             // Verify that the name in certificate matches exactly with the host name
             if (!nameInCert.equals(hostName)) {
-                if (logger.isLoggable(Level.FINER))
-                    logger.finer(logContext + " The name in certificate " + nameInCert + " does not match with the server name " + hostName + ".");
+                logFailMessage(nameInCert);
                 return false;
             }
-
-            if (logger.isLoggable(Level.FINER))
-                logger.finer(logContext + " The name in certificate:" + nameInCert + " validated against server name " + hostName + ".");
-
+            logSuccessMessage(nameInCert);
             return true;
+        }
+        
+        private void logFailMessage(String nameInCert) {
+            if (logger.isLoggable(Level.FINER)) {
+                logger.finer(logContext + " The name in certificate " + nameInCert
+                        + " does not match with the server name " + hostName + ".");
+            }
+        }
+
+        private void logSuccessMessage(String nameInCert) {
+            if (logger.isLoggable(Level.FINER)) {
+                logger.finer(logContext + " The name in certificate:" + nameInCert + " validated against server name "
+                        + hostName + ".");
+            }
         }
 
         public void checkClientTrusted(X509Certificate[] chain,
